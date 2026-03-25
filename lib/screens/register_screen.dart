@@ -3,23 +3,24 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
-import 'register_screen.dart';
 
+class RegisterScreen extends StatefulWidget {
+  final Function(String name, String email, String role) onRegisterSuccess;
 
-class LoginScreen extends StatefulWidget {
-  final Function(String name, String email, String role) onLoginSuccess;
-
-  const LoginScreen({super.key, required this.onLoginSuccess});
+  const RegisterScreen({super.key, required this.onRegisterSuccess});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _RegisterScreenState extends State<RegisterScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
@@ -52,12 +53,14 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void dispose() {
     _animController.dispose();
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -66,55 +69,31 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     try {
-      final response = await ApiService.login(
+      final response = await ApiService.register(
+        _nameController.text.trim(),
         _emailController.text.trim(),
         _passwordController.text,
       );
 
-      // Check for network / server error
-      if (response['error'] == true) {
-        setState(() {
-          _errorMessage = response['message']?.toString() ??
-              'Login failed. Please try again.';
-        });
-        return;
-      }
-
-      // Extract token
-      final token = response['token'] ?? response['access_token'];
-
-      if (token != null && token.toString().isNotEmpty) {
-        final user = response['user'] as Map<String, dynamic>? ?? {};
-
-        final name = user['name']?.toString() ??
-            _emailController.text.split('@').first;
-        final email =
-            user['email']?.toString() ?? _emailController.text.trim();
-
-        // Role: check 'role', 'user_type', or 'roles' array
-        String role = 'Employee';
-        if (user['role'] != null) {
-          role = user['role'].toString();
-        } else if (user['user_type'] != null) {
-          role = user['user_type'].toString();
-        } else if (user['roles'] is List && (user['roles'] as List).isNotEmpty) {
-          role = (user['roles'] as List).first.toString();
-        }
+      if (response.containsKey('token') || response['status'] == 'success') {
+        final token = response['token'] ?? response['access_token'];
+        final user = response['user'] ?? {};
+        final name = user['name'] ?? _nameController.text.trim();
+        final email = user['email'] ?? _emailController.text.trim();
+        final role = user['role'] ?? 'Employee';
 
         final id = user['id']?.toString() ?? '0';
 
-        await AuthService.saveAuth(token.toString(), name, email, role, id);
-        widget.onLoginSuccess(name, email, role);
+        await AuthService.saveAuth(token, name, email, role, id);
+        widget.onRegisterSuccess(name, email, role);
       } else {
         setState(() {
-          _errorMessage = response['message']?.toString() ??
-              response['error']?.toString() ??
-              'Invalid credentials. Please check your email and password.';
+          _errorMessage = response['message'] ?? 'Registration failed. Please try again.';
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Unexpected error: ${e.toString()}';
+        _errorMessage = 'Unable to connect to server. Check your connection.';
       });
     } finally {
       setState(() => _isLoading = false);
@@ -151,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen>
                     children: [
                       // Logo
                       _buildLogo(),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 30),
 
                       // Card
                       Container(
@@ -176,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Welcome back',
+                                  'Create Account',
                                   style: GoogleFonts.inter(
                                     fontSize: 26,
                                     fontWeight: FontWeight.w800,
@@ -186,13 +165,39 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Sign in to your CRM dashboard',
+                                  'Join our CRM platform today',
                                   style: GoogleFonts.inter(
                                     fontSize: 14,
                                     color: AppColors.grey400,
                                   ),
                                 ),
-                                const SizedBox(height: 32),
+                                const SizedBox(height: 24),
+
+                                // Full Name
+                                _buildLabel('Full Name'),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _nameController,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: AppColors.black,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: 'John Doe',
+                                    prefixIcon: const Icon(
+                                      Icons.person_outline_rounded,
+                                      size: 20,
+                                      color: AppColors.grey400,
+                                    ),
+                                  ),
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) {
+                                      return 'Name is required';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 16),
 
                                 // Email
                                 _buildLabel('Email address'),
@@ -222,7 +227,7 @@ class _LoginScreenState extends State<LoginScreen>
                                     return null;
                                   },
                                 ),
-                                const SizedBox(height: 20),
+                                const SizedBox(height: 16),
 
                                 // Password
                                 _buildLabel('Password'),
@@ -257,10 +262,40 @@ class _LoginScreenState extends State<LoginScreen>
                                     if (v == null || v.isEmpty) {
                                       return 'Password is required';
                                     }
+                                    if (v.length < 6) {
+                                      return 'Password must be at least 6 characters';
+                                    }
                                     return null;
                                   },
                                 ),
-                                const SizedBox(height: 28),
+                                const SizedBox(height: 16),
+
+                                // Confirm Password
+                                _buildLabel('Confirm Password'),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: _confirmPasswordController,
+                                  obscureText: _obscurePassword,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: AppColors.black,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: '••••••••',
+                                    prefixIcon: const Icon(
+                                      Icons.lock_reset_rounded,
+                                      size: 20,
+                                      color: AppColors.grey400,
+                                    ),
+                                  ),
+                                  validator: (v) {
+                                    if (v != _passwordController.text) {
+                                      return 'Passwords do not match';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 24),
 
                                 // Error
                                 if (_errorMessage != null) ...[
@@ -291,12 +326,12 @@ class _LoginScreenState extends State<LoginScreen>
                                   const SizedBox(height: 16),
                                 ],
 
-                                // Login button
+                                // Register button
                                 SizedBox(
                                   width: double.infinity,
                                   height: 54,
                                   child: ElevatedButton(
-                                    onPressed: _isLoading ? null : _handleLogin,
+                                    onPressed: _isLoading ? null : _handleRegister,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppColors.gold,
                                       foregroundColor: AppColors.navy,
@@ -315,7 +350,7 @@ class _LoginScreenState extends State<LoginScreen>
                                             ),
                                           )
                                         : Text(
-                                            'Sign In',
+                                            'Create Account',
                                             style: GoogleFonts.inter(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
@@ -326,19 +361,10 @@ class _LoginScreenState extends State<LoginScreen>
                                 
                                 const SizedBox(height: 20),
                                 
-                                // Register link
+                                // Back to login
                                 Center(
                                   child: TextButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => RegisterScreen(
-                                            onRegisterSuccess: widget.onLoginSuccess,
-                                          ),
-                                        ),
-                                      );
-                                    },
+                                    onPressed: () => Navigator.pop(context),
                                     child: RichText(
                                       text: TextSpan(
                                         style: GoogleFonts.inter(
@@ -346,9 +372,9 @@ class _LoginScreenState extends State<LoginScreen>
                                           color: AppColors.grey600,
                                         ),
                                         children: [
-                                          const TextSpan(text: "Don't have an account? "),
+                                          const TextSpan(text: 'Already have an account? '),
                                           TextSpan(
-                                            text: 'Sign Up',
+                                            text: 'Sign In',
                                             style: GoogleFonts.inter(
                                               fontWeight: FontWeight.w700,
                                               color: AppColors.navy,
@@ -362,42 +388,6 @@ class _LoginScreenState extends State<LoginScreen>
                               ],
                             ),
                           ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Server info
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(maxWidth: 420),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.white.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: AppColors.gold.withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.cloud_rounded,
-                                size: 14,
-                                color: AppColors.gold.withValues(alpha: 0.8)),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Connected to: 192.168.1.12:8000',
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  color: AppColors.white.withValues(alpha: 0.6),
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ),
-                          ],
                         ),
                       ),
 
@@ -424,23 +414,29 @@ class _LoginScreenState extends State<LoginScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Image.asset(
-          'lib/theme/logo.png',
-          width: 84,
-          height: 94,
-          color: AppColors.white,
-          fit: BoxFit.contain,
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppColors.gold,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.grid_view_rounded,
+            color: AppColors.navy,
+            size: 24,
+          ),
         ),
         const SizedBox(width: 12),
-        // Text(
-        //   'Think Digital',
-        //   style: GoogleFonts.inter(
-        //     fontSize: 24,
-        //     fontWeight: FontWeight.w800,
-        //     color: AppColors.white,
-        //     letterSpacing: -0.5,
-        //   ),
-        // ),
+        Text(
+          'ThinkDigital',
+          style: GoogleFonts.inter(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: AppColors.white,
+            letterSpacing: -0.5,
+          ),
+        ),
       ],
     );
   }

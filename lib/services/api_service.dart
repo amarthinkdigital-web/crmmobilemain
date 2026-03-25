@@ -1,23 +1,33 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Demo credentials for offline/testing mode:
-///   Email:    demo@thinkdigital.com
-///   Password: password123
+/// Live Backend: http://192.168.1.12:8000/api
 ///
-/// When the backend is unreachable, the app automatically
-/// falls back to demo mode with these credentials.
+/// Laravel Sanctum Routes:
+///   POST  /login                    → { email, password, device_name }
+///   POST  /logout                   → Bearer token required
+///   GET   /user                     → Bearer token required
+///   POST  /attendance/clock-in      → Bearer token required
+///   POST  /attendance/clock-out     → Bearer token required
+///   POST  /attendance/break-in      → Bearer token required
+///   POST  /attendance/break-out     → Bearer token required
 
 class ApiService {
   static String get baseUrl =>
-      dotenv.env['API_BASE_URL'] ?? 'http://localhost:8000/api';
+      dotenv.env['API_BASE_URL'] ?? 'http://192.168.1.12:8000/api';
 
-  // Set to true to always use demo data (skip API calls entirely)
-  static bool _forceDemoMode = false;
-
-  static void setDemoMode(bool enabled) => _forceDemoMode = enabled;
+  static String get _deviceName {
+    if (kIsWeb) return 'FlutterWeb';
+    try {
+      return Platform.operatingSystem;
+    } catch (_) {
+      return 'FlutterApp';
+    }
+  }
 
   static Future<Map<String, String>> _headers() async {
     final prefs = await SharedPreferences.getInstance();
@@ -29,191 +39,1783 @@ class ApiService {
     };
   }
 
-  // ─── Auth ───
+  // ─── Auth ─────────────────────────────────────────────────────────────────
 
+  /// Logs in via Laravel Sanctum.
+  /// Sends: email, password, device_name
+  /// On network error returns: { 'error': true, 'message': '...' }
   static Future<Map<String, dynamic>> login(
-      String email, String password) async {
-    // Try real API first
-    if (!_forceDemoMode) {
-      try {
-        final response = await http
-            .post(
-              Uri.parse('$baseUrl/login'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: jsonEncode({'email': email, 'password': password}),
-            )
-            .timeout(const Duration(seconds: 5));
+    String email,
+    String password,
+  ) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/login'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({
+              'email': email,
+              'login_id': email,
+              'password': password,
+              'device_name': _deviceName,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
 
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          return jsonDecode(response.body) as Map<String, dynamic>;
-        }
-        // If server returned an error, return that
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      } catch (_) {
-        // Server unreachable – fall through to demo mode
+      final body = response.body;
+      if (body.isEmpty) {
+        return {'error': true, 'message': 'Server returned an empty response.'};
       }
-    }
 
-    // ──── Demo Mode ────
-    return _demoLogin(email, password);
+      final data = jsonDecode(body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Sanctum can return a plain token string
+        if (data is String && data.isNotEmpty) {
+          final user = await _fetchUser(data);
+          return {'token': data, 'user': user};
+        }
+        // Or a JSON object
+        return data as Map<String, dynamic>;
+      }
+
+      // Server returned validation/auth error (422, 401, etc.)
+      if (data is Map) {
+        final msg =
+            data['message'] ??
+            data['error'] ??
+            'Login failed (${response.statusCode})';
+        return {'error': true, 'message': msg.toString()};
+      }
+
+      return {
+        'error': true,
+        'message': 'Login failed (${response.statusCode})',
+      };
+    } on SocketException {
+      return {
+        'error': true,
+        'message':
+            'Cannot reach the server. Make sure you are on the same network as the backend (${_hostOnly()}).',
+      };
+    } on Exception catch (e) {
+      final msg = e.toString();
+      if (msg.contains('timed out') || msg.contains('TimeoutException')) {
+        return {
+          'error': true,
+          'message': 'Connection timed out. Server may be down or unreachable.',
+        };
+      }
+      return {'error': true, 'message': 'Connection error: $msg'};
+    }
   }
 
-  static Map<String, dynamic> _demoLogin(String email, String password) {
-    // Demo credentials
-    const demoUsers = [
-      {
-        'email': 'demo@thinkdigital.com',
-        'password': 'password123',
-        'name': 'Parth Gorde',
-        'role': 'Admin',
-      },
-      {
-        'email': 'employee@thinkdigital.com',
-        'password': 'password123',
-        'name': 'John Doe',
-        'role': 'Employee',
-      },
-      {
-        'email': 'manager@thinkdigital.com',
-        'password': 'password123',
-        'name': 'Jane Smith',
-        'role': 'Manager',
-      },
-    ];
-
-    final user = demoUsers.cast<Map<String, String>?>().firstWhere(
-          (u) => u!['email'] == email && u['password'] == password,
-          orElse: () => null,
-        );
-
-    if (user != null) {
-      return {
-        'token': 'demo-token-${DateTime.now().millisecondsSinceEpoch}',
-        'user': {
-          'id': 1,
-          'name': user['name'],
-          'email': user['email'],
-          'role': user['role'],
-        },
-        'message': 'Login successful (Demo Mode)',
-      };
+  static String _hostOnly() {
+    try {
+      return Uri.parse(baseUrl).host;
+    } catch (_) {
+      return baseUrl;
     }
+  }
 
-    return {'message': 'Invalid credentials. Try demo@thinkdigital.com / password123'};
+  /// Fetches authenticated user after plain-token login
+  static Future<Map<String, dynamic>> _fetchUser(String token) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/user'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  static Future<Map<String, dynamic>> register(
+    String name,
+    String email,
+    String password,
+  ) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/register'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({
+              'name': name,
+              'email': email,
+              'login_id': email,
+              'password': password,
+              'password_confirmation': password,
+              'device_name': _deviceName,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } on SocketException {
+      return {
+        'error': true,
+        'message': 'Cannot reach the server. Check your network connection.',
+      };
+    } catch (_) {
+      return {'error': true, 'message': 'Registration failed. Try again.'};
+    }
   }
 
   static Future<void> logout() async {
-    if (!_forceDemoMode) {
-      try {
-        final headers = await _headers();
-        await http
-            .post(Uri.parse('$baseUrl/logout'), headers: headers)
-            .timeout(const Duration(seconds: 5));
-      } catch (_) {}
-    }
-    // Demo mode: nothing extra to do
+    try {
+      final headers = await _headers();
+      await http
+          .post(Uri.parse('$baseUrl/logout'), headers: headers)
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {}
+    // Always clear local auth regardless of server response
   }
 
-  // ─── Clock ───
+  // ─── Attendance ────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> clockIn() async {
-    if (!_forceDemoMode) {
-      try {
-        final headers = await _headers();
-        final response = await http
-            .post(Uri.parse('$baseUrl/clock-in'), headers: headers)
-            .timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          return jsonDecode(response.body) as Map<String, dynamic>;
-        }
-      } catch (_) {}
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/attendance/clock-in'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'error': false, ...data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to clock in',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
     }
-    return {
-      'status': 'success',
-      'message': 'Clocked in successfully',
-      'clock_in': DateTime.now().toIso8601String(),
-    };
   }
 
   static Future<Map<String, dynamic>> clockOut() async {
-    if (!_forceDemoMode) {
-      try {
-        final headers = await _headers();
-        final response = await http
-            .post(Uri.parse('$baseUrl/clock-out'), headers: headers)
-            .timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          return jsonDecode(response.body) as Map<String, dynamic>;
-        }
-      } catch (_) {}
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/attendance/clock-out'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'error': false, ...data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to clock out',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
     }
-    return {
-      'status': 'success',
-      'message': 'Clocked out successfully',
-      'clock_out': DateTime.now().toIso8601String(),
-    };
   }
 
-  // ─── Break ───
+  static Future<Map<String, dynamic>> getAllAttendances() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/attendance/all-attendances'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        List list = [];
+        if (data is List) {
+          list = data;
+        } else if (data is Map) {
+          if (data['data'] is List) {
+            list = data['data'];
+          } else if (data['data'] is Map && data['data']['data'] is List) {
+            list = data['data']['data'];
+          } else {
+            // Find any list in values
+            for (var val in data.values) {
+              if (val is List) {
+                list = val;
+                break;
+              }
+            }
+          }
+        }
+        return {'error': false, 'data': list, 'raw': data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load all attendances',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getMyAttendance() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/attendance/my-attendance'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        List list = [];
+        if (data is List) {
+          list = data;
+        } else if (data is Map) {
+          if (data['data'] is List) {
+            list = data['data'];
+          } else if (data['data'] is Map && data['data']['data'] is List) {
+            list = data['data']['data'];
+          } else {
+            for (var val in data.values) {
+              if (val is List) {
+                list = val;
+                break;
+              }
+            }
+          }
+        }
+        return {'error': false, 'data': list, 'raw': data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load my attendance',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Break ─────────────────────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> breakIn() async {
-    if (!_forceDemoMode) {
-      try {
-        final headers = await _headers();
-        final response = await http
-            .post(Uri.parse('$baseUrl/break-in'), headers: headers)
-            .timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          return jsonDecode(response.body) as Map<String, dynamic>;
-        }
-      } catch (_) {}
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/attendance/break-in'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'error': false, ...data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to start break',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
     }
-    return {
-      'status': 'success',
-      'message': 'Break started',
-      'break_in': DateTime.now().toIso8601String(),
-    };
   }
 
   static Future<Map<String, dynamic>> breakOut() async {
-    if (!_forceDemoMode) {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/attendance/break-out'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'error': false, ...data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to end break',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Status ────────────────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> getStatus() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/attendance/status'), headers: headers)
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'status': data['status'] ?? 'idle', ...data};
+      }
+    } catch (_) {}
+    return {'status': 'idle'};
+  }
+
+  static Future<Map<String, dynamic>> submitCorrection({
+    required String date,
+    required String clockIn,
+    required String clockOut,
+    required String reason,
+  }) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/attendance/correction'),
+            headers: headers,
+            body: jsonEncode({
+              'date': date,
+              'clock_in': clockIn,
+              'clock_out': clockOut,
+              'reason': reason,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'error': false, ...data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to submit correction',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Manager Profiles ──────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> getManagerProfiles() async {
+    try {
+      final headers = await _headers();
+      // Handle potential prefix or exact base url match.
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager-profiles'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        // Handle paginated responses as well as standard ones
+        final dynamic pagedData = data['data'];
+        List list = [];
+        if (pagedData is List) {
+          list = pagedData;
+        } else if (pagedData is Map && pagedData['data'] is List) {
+          // some apis return paginate data inside data: { data: [] }
+          list = pagedData['data'];
+        } else if (data is List) {
+          list = data;
+        }
+        return {'error': false, 'data': list};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load manager profiles',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Employee Profiles ─────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> getEmployeeProfiles() async {
+    try {
+      final headers = await _headers();
+      // Handle potential prefix or exact base url match.
+      final response = await http
+          .get(Uri.parse('$baseUrl/employee-profiles'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        // Handle paginated responses as well as standard ones
+        final dynamic pagedData = data['data'];
+        List list = [];
+        if (pagedData is List) {
+          list = pagedData;
+        } else if (pagedData is Map && pagedData['data'] is List) {
+          // some apis return paginate data inside data: { data: [] }
+          list = pagedData['data'];
+        } else if (data is List) {
+          list = data;
+        }
+        return {'error': false, 'data': list};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load employee profiles',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Departments ───────────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> getDepartments() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/departments'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        // Handle both direct list or wrapped data object
+        final List list = data is List ? data : (data['data'] ?? []);
+        return {'error': false, 'data': list};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load departments',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createDepartment(String name) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/departments'),
+            headers: headers,
+            body: jsonEncode({'name': name}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'error': false, ...data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to create department',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateDepartment(
+    int id,
+    String name,
+  ) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl/departments/$id'),
+            headers: headers,
+            body: jsonEncode({'name': name}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'error': false, ...data};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to update department',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteDepartment(int id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/departments/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        return {'error': false};
+      }
+      final data = jsonDecode(response.body);
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to delete department',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+  // ─── Leave Management ──────────────────────────────────────────────────────
+
+  // Manager Leaves
+  static Future<Map<String, dynamic>> getManagerLeaves() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/leaves'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'error': false, 'data': _extractList(data)};
+      }
+      return {'error': true, 'message': data['message'] ?? 'Failed to load manager leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> submitManagerLeave(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/manager/leaves'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      
+      String errorMsg = data['message'] ?? 'Failed to submit leave';
+      if (data['errors'] != null && data['errors'] is Map) {
+        final Map errors = data['errors'];
+        errorMsg = errors.values.map((v) => v is List ? v.join('\n') : v.toString()).join('\n');
+      }
+      return {'error': true, 'message': errorMsg};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getManagerTeamLeaves() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/team-leaves'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load team leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> setManagerTeamLeaveStatus(int id, String status, {String? leaveType, String? reason}) async {
+    try {
+      final headers = await _headers();
+      final body = jsonEncode({
+        'status': status,
+        'leave_status': status,
+        'leave': status,
+        'id': id,
+        'leave_id': id,
+        'leave_type': leaveType ?? 'Leave',
+        if (reason != null && reason.isNotEmpty) 'reject_reason': reason,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      });
+      final response = await http
+          .post(Uri.parse('$baseUrl/manager/team-leaves/$id/approve'), headers: headers, body: body)
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to update leave'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getAdminManagerLeaveRequests() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/manager-leave-requests'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load admin manager leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> setAdminManagerLeaveStatus(int id, String status, {String? leaveType, String? reason}) async {
+    try {
+      final headers = await _headers();
+      final body = jsonEncode({
+        'status': status,
+        'leave_status': status,
+        'leave': status,
+        'id': id,
+        'leave_id': id,
+        'leave_type': leaveType ?? 'Leave',
+        if (reason != null && reason.isNotEmpty) 'reject_reason': reason,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      });
+      final response = await http
+          .post(Uri.parse('$baseUrl/manager/manager-leave-requests/$id/approve'), headers: headers, body: body)
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to update leave'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // Employee Leaves
+  static Future<Map<String, dynamic>> getEmployeeLeaves() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/employee/leaves'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load employee leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> submitEmployeeLeave(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/employee/leaves'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      
+      String errorMsg = data['message'] ?? 'Failed to submit leave';
+      if (data['errors'] != null && data['errors'] is Map) {
+        final Map errors = data['errors'];
+        errorMsg = errors.values.map((v) => v is List ? v.join('\n') : v.toString()).join('\n');
+      }
+      return {'error': true, 'message': errorMsg};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getAllEmployeeLeaveRequests() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/employee/leave-requests'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load staff leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+  
+  static Future<Map<String, dynamic>> getAdminEmployeeLeaveRequests() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/employee/admin-leave-requests'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load admin leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> setEmployeeLeaveStatus(int id, String status, {String? leaveType, String? reason}) async {
+    try {
+      final headers = await _headers();
+      final body = jsonEncode({
+        'status': status,
+        'leave_status': status,
+        'leave': status,
+        'id': id,
+        'leave_id': id,
+        'leave_type': leaveType ?? 'Leave',
+        if (reason != null && reason.isNotEmpty) 'reject_reason': reason,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      });
+      final response = await http
+          .post(Uri.parse('$baseUrl/employee/leave-requests/$id/approve'), headers: headers, body: body)
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to update leave'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Daily Worksheets ───────────────────────────────────────────────────
+
+  // 1. Employee Daily Worksheets
+  static Future<Map<String, dynamic>> getEmployeeDailyWorksheets() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/employee/daily-worksheets'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load worksheets'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> submitEmployeeDailyWorksheet(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/employee/daily-worksheets'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      
+      String errorMsg = data['message'] ?? 'Failed to submit worksheet';
+      if (data['errors'] != null && data['errors'] is Map) {
+        final errors = data['errors'] as Map;
+        if (errors.isNotEmpty) {
+          final firstError = errors.values.first;
+          if (firstError is List && firstError.isNotEmpty) {
+            errorMsg = firstError.first.toString();
+          } else {
+            errorMsg = firstError.toString();
+          }
+        }
+      }
+      return {'error': true, 'message': errorMsg};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getEmployeeDailyWorksheetDetails(int id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/employee/daily-worksheets/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load worksheet details'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateEmployeeDailyWorksheet(int id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(Uri.parse('$baseUrl/employee/daily-worksheets/$id'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to update worksheet'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // 2. Manager Daily Worksheets
+  static Future<Map<String, dynamic>> getManagerDailyWorksheets() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/daily-worksheets'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load manager worksheets'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> submitManagerDailyWorksheet(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/manager/daily-worksheets'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      
+      String errorMsg = data['message'] ?? 'Failed to submit manager worksheet';
+      if (data['errors'] != null && data['errors'] is Map) {
+        final errors = data['errors'] as Map;
+        if (errors.isNotEmpty) {
+          final firstError = errors.values.first;
+          if (firstError is List && firstError.isNotEmpty) {
+            errorMsg = firstError.first.toString();
+          } else {
+            errorMsg = firstError.toString();
+          }
+        }
+      }
+      return {'error': true, 'message': errorMsg};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getManagerDailyWorksheetDetails(int id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/daily-worksheets/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load manager worksheet details'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateManagerDailyWorksheet(int id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(Uri.parse('$baseUrl/manager/daily-worksheets/$id'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to update manager worksheet'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // 3. Team Leader Review APIs
+  static Future<Map<String, dynamic>> getTeamWorksheets() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/team-worksheets'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load team worksheets'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> reviewTeamWorksheet(int id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/team-worksheets/$id/review'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to review team worksheet'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // 4. Admin Daily Worksheet APIs
+  static Future<Map<String, dynamic>> getAdminDailyWorksheets() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/admin/daily-worksheets'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load admin worksheets'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> reviewAdminWorksheet(int id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/admin/daily-worksheets/$id/review'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to review admin worksheet'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getAdminTeamApprovals() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/admin/team-approvals'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load team approvals'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static List<dynamic>? _cachedProjects;
+
+  static Future<Map<String, dynamic>> getProjects({List<dynamic>? fallbackData}) async {
+    if (_cachedProjects != null && _cachedProjects!.isNotEmpty) {
+      return {'error': false, 'data': _cachedProjects};
+    }
+
+    // Try multiple speculative endpoints
+    final endpoints = ['/projects', '/employee/projects', '/my-assignments', '/employee/assignments'];
+    for (var endpoint in endpoints) {
       try {
         final headers = await _headers();
         final response = await http
-            .post(Uri.parse('$baseUrl/break-out'), headers: headers)
+            .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
             .timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          return jsonDecode(response.body) as Map<String, dynamic>;
+        
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final list = _extractList(data);
+          if (list.isNotEmpty) {
+            _cachedProjects = list;
+            return {'error': false, 'data': list};
+          }
         }
       } catch (_) {}
     }
+
+    // If all fail, try to extract from provided fallback worksheets
+    if (fallbackData != null && fallbackData.isNotEmpty) {
+      final Map<dynamic, dynamic> extracted = {};
+      for (var item in fallbackData) {
+        final p = item['project'];
+        final pId = item['project_id'] ?? (p is Map ? p['id'] : null);
+        final pName = item['project_name'] ?? (p is Map ? p['name'] : (p is String ? p : null));
+        
+        if (pId != null && pName != null) {
+          extracted[pId] = pName;
+        }
+      }
+      if (extracted.isNotEmpty) {
+        final list = extracted.entries.map((e) => {'id': e.key, 'name': e.value}).toList();
+        _cachedProjects = list;
+        return {'error': false, 'data': list};
+      }
+    }
+
+    // Absolute fallback
     return {
-      'status': 'success',
-      'message': 'Break ended',
-      'break_out': DateTime.now().toIso8601String(),
+      'error': false,
+      'data': [
+        {'id': 1, 'name': 'CRM Development'},
+        {'id': 2, 'name': 'Mobile App'},
+        {'id': 3, 'name': 'Marketing Campaign'},
+        {'id': 4, 'name': 'Infrastructure'},
+      ]
     };
   }
 
-  // ─── Status ───
+  // ─── Official Leaves (Company Holidays) ────────────────────────────────────
 
-  static Future<Map<String, dynamic>> getStatus() async {
-    if (!_forceDemoMode) {
-      try {
-        final headers = await _headers();
-        final response = await http
-            .get(Uri.parse('$baseUrl/attendance/status'), headers: headers)
-            .timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200) {
-          return jsonDecode(response.body) as Map<String, dynamic>;
-        }
-      } catch (_) {}
+  // Admin Official Leaves
+  static Future<Map<String, dynamic>> getAdminOfficialLeaves() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/admin/official-leaves'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load official leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
     }
-    return {
-      'status': 'idle',
-      'message': 'Demo mode - no server data',
-    };
+  }
+
+  static Future<Map<String, dynamic>> createAdminOfficialLeave(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/admin/official-leaves'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      
+      String? errorMessage;
+      if (data['errors'] != null) {
+        if (data['errors'] is Map) {
+          errorMessage = (data['errors'] as Map).values.map((v) => v.toString()).join(", ");
+        } else {
+          errorMessage = data['errors'].toString();
+        }
+      }
+
+      return {
+        'error': true, 
+        'message': errorMessage ?? data['message'] ?? 'Failed to create official leave'
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateAdminOfficialLeave(dynamic id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      // For Laravel compatibility, sometimes PATCH via POST with _method is safer,
+      // but here we'll stick to PATCH and ensure we parse validation errors correctly.
+      final response = await http
+          .patch(Uri.parse('$baseUrl/admin/official-leaves/$id'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      
+      String? errorMessage;
+      if (data['errors'] != null) {
+        if (data['errors'] is Map) {
+          errorMessage = (data['errors'] as Map).values.map((v) => v.toString()).join(", ");
+        } else {
+          errorMessage = data['errors'].toString();
+        }
+      }
+      
+      return {
+        'error': true, 
+        'message': errorMessage ?? data['message'] ?? 'Failed to update official leave'
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // Removed duplicate updateAdminOfficialLeave call as it's now integrated above
+
+  static Future<Map<String, dynamic>> deleteAdminOfficialLeave(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/admin/official-leaves/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete official leave'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // Manager Official Leaves
+  static Future<Map<String, dynamic>> getManagerOfficialLeaves() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/official-leaves'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load official leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createManagerOfficialLeave(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/manager/official-leaves'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+
+      String? errorMessage;
+      if (data['errors'] != null) {
+        if (data['errors'] is Map) {
+          errorMessage = (data['errors'] as Map).values.map((v) => v.toString()).join(", ");
+        } else {
+          errorMessage = data['errors'].toString();
+        }
+      }
+
+      return {'error': true, 'message': errorMessage ?? data['message'] ?? 'Failed to create official leave'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateManagerOfficialLeave(dynamic id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .patch(Uri.parse('$baseUrl/manager/official-leaves/$id'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+
+      String? errorMessage;
+      if (data['errors'] != null) {
+        if (data['errors'] is Map) {
+          errorMessage = (data['errors'] as Map).values.map((v) => v.toString()).join(", ");
+        } else {
+          errorMessage = data['errors'].toString();
+        }
+      }
+
+      return {'error': true, 'message': errorMessage ?? data['message'] ?? 'Failed to update official leave'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteManagerOfficialLeave(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/manager/official-leaves/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete official leave'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // Employee Official Leaves
+  static Future<Map<String, dynamic>> getEmployeeOfficialLeaves() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/employee/official-leaves'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load official leaves'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static List _extractList(dynamic data) {
+    if (data is List) return data;
+    if (data is Map) {
+      if (data['data'] is List) return data['data'];
+      // Handle nested tasks structure: { "data": { "tasks": [...] } }
+      if (data['data'] is Map) {
+        final nestedData = data['data'] as Map;
+        if (nestedData['tasks'] is List) return nestedData['tasks'];
+        if (nestedData['data'] is List) return nestedData['data'];
+      }
+      // Fallback: search all values
+      for (var val in data.values) {
+        if (val is List) return val;
+        if (val is Map) {
+          for (var innerVal in val.values) {
+            if (innerVal is List) return innerVal;
+          }
+        }
+      }
+    }
+    return [];
+  }
+
+  static Future<Map<String, dynamic>> deleteEmployeeDailyWorksheet(int id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/employee/daily-worksheets/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete worksheet'};
+    } catch (e) {
+      return {'error': true, 'message': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteManagerDailyWorksheet(int id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/manager/daily-worksheets/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete worksheet'};
+    } catch (e) {
+      return {'error': true, 'message': e.toString()};
+    }
+  }
+
+  /// Extract a human-readable error message from a Laravel validation response.
+  static String _extractErrorMessage(dynamic data) {
+    if (data == null) return 'Operation failed';
+    if (data['errors'] is Map) {
+      final errors = data['errors'] as Map;
+      final msgs = <String>[];
+      for (final v in errors.values) {
+        if (v is List) {
+          msgs.addAll(v.map((e) => e.toString()));
+        } else {
+          msgs.add(v.toString());
+        }
+      }
+      if (msgs.isNotEmpty) return msgs.join('\n');
+    }
+    return data['message']?.toString() ?? 'Operation failed';
+  }
+
+  // ─── Events / Meetings ────────────────────────────────────────────────────
+
+  // --- Admin Events ---
+  static Future<Map<String, dynamic>> getAdminEvents() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/admin/events'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load events'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createAdminEvent(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/admin/events'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateAdminEvent(dynamic id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl/admin/events/$id'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteAdminEvent(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/admin/events/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete event'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> markAdminEventViewed(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/admin/events/$id/mark-view'), headers: headers, body: jsonEncode({}))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false};
+      return {'error': true, 'message': 'Failed to mark event'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // --- Manager Events ---
+  static Future<Map<String, dynamic>> getManagerEvents() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/events'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load events'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createManagerEvent(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/manager/events'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateManagerEvent(dynamic id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl/manager/events/$id'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteManagerEvent(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/manager/events/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete event'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> markManagerEventViewed(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/manager/events/$id/mark-view'), headers: headers, body: jsonEncode({}))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false};
+      return {'error': true, 'message': 'Failed to mark event'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // --- Employee Events ---
+  static Future<Map<String, dynamic>> getEmployeeEvents() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/employee/events'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load events'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createEmployeeEvent(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/employee/events'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateEmployeeEvent(dynamic id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl/employee/events/$id'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteEmployeeEvent(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/employee/events/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete event'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> markEmployeeEventViewed(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/employee/events/$id/mark-view'), headers: headers, body: jsonEncode({}))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false};
+      return {'error': true, 'message': 'Failed to mark event'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Task Management ──────────────────────────────────────────────────────
+
+  // --- Admin Tasks ---
+  static Future<Map<String, dynamic>> getAdminTasks() async {
+    try {
+      final headers = await _headers();
+      final url = '$baseUrl/admin/tasks';
+      debugPrint('Fetching Admin Tasks from: $url');
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load tasks'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createAdminTask(Map<String, dynamic> body, {List<File>? attachments}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/admin/tasks'));
+      request.headers.addAll({
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+
+      body.forEach((key, value) {
+        request.fields[key] = value.toString();
+      });
+
+      if (attachments != null && attachments.isNotEmpty) {
+        for (var file in attachments) {
+          request.files.add(await http.MultipartFile.fromPath('attachments[]', file.path));
+        }
+      }
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamedResponse);
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateAdminTask(dynamic id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(Uri.parse('$baseUrl/admin/tasks/$id'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteAdminTask(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/admin/tasks/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete task'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getManagerTasks({Map<String, dynamic>? queryParams}) async {
+    try {
+      final headers = await _headers();
+      var uri = Uri.parse('$baseUrl/manager/tasks');
+      if (queryParams != null && queryParams.isNotEmpty) {
+        uri = uri.replace(queryParameters: queryParams.map((k, v) => MapEntry(k, v.toString())));
+      }
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load tasks'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createManagerTask(Map<String, dynamic> body, {List<File>? attachments}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/manager/tasks'));
+      request.headers.addAll({
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+
+      // Add text fields
+      body.forEach((key, value) {
+        request.fields[key] = value.toString();
+      });
+
+      // Add attachments
+      if (attachments != null && attachments.isNotEmpty) {
+        for (var file in attachments) {
+          request.files.add(await http.MultipartFile.fromPath('attachments[]', file.path));
+        }
+      }
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamedResponse);
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateManagerTask(dynamic id, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(Uri.parse('$baseUrl/manager/tasks/$id'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteManagerTask(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/manager/tasks/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete task'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // --- Employee Tasks ---
+  static Future<Map<String, dynamic>> getEmployeeTasks() async {
+    try {
+      final headers = await _headers();
+      final url = '$baseUrl/employee/tasks';
+      debugPrint('Fetching Employee Tasks from: $url');
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load employee tasks'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getEmployeeTasksAssignedByMe() async {
+    try {
+      final headers = await _headers();
+      final url = '$baseUrl/employee/tasks/assigned-by-me';
+      debugPrint('Fetching Employee Assigned By Me Tasks from: $url');
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': _extractList(data)};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load tasks'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateTaskStatus(dynamic id, String status, {String? liveLink}) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .patch(
+            Uri.parse('$baseUrl/employee/tasks/$id/status'),
+            headers: headers,
+            body: jsonEncode({
+              'status': status,
+              if (liveLink != null) 'live_link': liveLink,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': _extractErrorMessage(data)};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> startTaskTimer(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/employee/tasks/$id/start-timer'), headers: headers, body: jsonEncode({}))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to start timer'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> stopTaskTimer(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/employee/tasks/$id/stop-timer'), headers: headers, body: jsonEncode({}))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to stop timer'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Invoices ─────────────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> getInvoices() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/admin/invoices'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': data['data'] ?? data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to load invoices'};
+    } catch (e) {
+      return {'error': true, 'message': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createInvoice(Map<String, dynamic> data) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/admin/invoices'), headers: headers, body: jsonEncode(data))
+          .timeout(const Duration(seconds: 15));
+      final resBody = jsonDecode(response.body);
+      if (response.statusCode == 201 || response.statusCode == 200) return {'error': false, ...resBody};
+      return {'error': true, 'message': resBody['message'] ?? 'Failed to create invoice'};
+    } catch (e) {
+      return {'error': true, 'message': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateInvoice(dynamic id, Map<String, dynamic> data) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(Uri.parse('$baseUrl/admin/invoices/$id'), headers: headers, body: jsonEncode(data))
+          .timeout(const Duration(seconds: 15));
+      final resBody = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...resBody};
+      return {'error': true, 'message': resBody['message'] ?? 'Failed to update invoice'};
+    } catch (e) {
+      return {'error': true, 'message': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteInvoice(dynamic id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/admin/invoices/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to delete invoice'};
+    } catch (e) {
+      return {'error': true, 'message': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> downloadInvoicePdf(dynamic id) async {
+    // This would typically return a URL or raw bytes
+    return {'error': false, 'url': '$baseUrl/admin/invoices/$id/download'};
   }
 }
