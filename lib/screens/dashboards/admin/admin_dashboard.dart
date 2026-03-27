@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/api_service.dart';
 import '../../../services/auth_service.dart';
+import '../attendance_action_card.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -95,6 +96,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildProfileHeader(),
+            const SizedBox(height: 24),
+            const AttendanceActionCard(),
             const SizedBox(height: 32),
             _buildSystemStats(),
             const SizedBox(height: 32),

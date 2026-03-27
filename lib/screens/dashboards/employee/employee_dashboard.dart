@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/api_service.dart';
 import '../../../services/auth_service.dart';
+import '../attendance_action_card.dart';
 
 class EmployeeDashboard extends StatefulWidget {
   final String userName;
@@ -107,6 +108,8 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildProfileHeader(),
+            const SizedBox(height: 24),
+            const AttendanceActionCard(),
             const SizedBox(height: 32),
             _buildPerformanceStats(),
             const SizedBox(height: 32),
@@ -419,22 +422,26 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.navy,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400),
-                  ),
-                ],
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

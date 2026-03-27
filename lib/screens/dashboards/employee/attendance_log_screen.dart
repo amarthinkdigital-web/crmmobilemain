@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../../../services/api_service.dart';
 import 'package:intl/intl.dart';
 
 class AttendanceLogScreen extends StatefulWidget {
@@ -15,6 +16,9 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
   String? _selectedYear;
   String? _selectedStatus;
 
+  List<Map<String, dynamic>> _logs = [];
+  bool _isLoading = true;
+
   final List<String> _months = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
@@ -28,6 +32,25 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     _selectedMonth = DateFormat('MMMM').format(DateTime.now());
     _selectedYear = DateTime.now().year.toString();
     _selectedStatus = 'All';
+    _fetchLogs();
+  }
+
+  Future<void> _fetchLogs() async {
+    setState(() => _isLoading = true);
+    final res = await ApiService.getMyAttendance();
+    if (mounted) {
+      if (res['error'] == false) {
+        setState(() {
+          _logs = List<Map<String, dynamic>>.from(res['data'] ?? []);
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? 'Failed to load logs')),
+        );
+      }
+    }
   }
 
   @override
@@ -189,16 +212,36 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
   }
 
   Widget _buildLogList() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator(color: AppColors.navy));
+    if (_logs.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40.0),
+          child: Text("No attendance records found.", style: GoogleFonts.inter(color: AppColors.grey400)),
+        ),
+      );
+    }
+
     return Column(
-      children: List.generate(5, (index) {
-        final isLate = index % 3 == 0;
-        final date = DateTime.now().subtract(Duration(days: index));
-        return _buildDetailedAttendanceCard(date, isLate);
-      }),
+      children: _logs.map((log) {
+        final dateRaw = log['date']?.toString() ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final date = DateTime.parse(dateRaw).toLocal();
+        
+        final isLate = log['is_late'] == 1 || log['is_late'] == true;
+        return _buildDetailedAttendanceCard(date, isLate, log);
+      }).toList(),
     );
   }
 
-  Widget _buildDetailedAttendanceCard(DateTime date, bool isLate) {
+  Widget _buildDetailedAttendanceCard(DateTime date, bool isLate, Map<String, dynamic> log) {
+    final String clockIn = log['clock_in'] != null ? DateFormat('hh:mm A').format(DateTime.parse(log['clock_in']!).toLocal()) : "--:--";
+    final bool isActive = log['clock_out'] == null;
+    final String clockOut = !isActive ? DateFormat('hh:mm A').format(DateTime.parse(log['clock_out']!).toLocal()) : "IN PROGRESS";
+    
+    final int workMinutes = int.tryParse(log['total_work_minutes']?.toString() ?? '0') ?? 0;
+    final int breakMinutes = int.tryParse(log['total_break_minutes']?.toString() ?? '0') ?? 0;
+    final String status = log['attendance_status']?.toString().replaceAll('_', ' ').toUpperCase() ?? (isLate ? 'LATE' : (isActive ? 'WORKING' : 'PRESENT'));
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -253,15 +296,15 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isLate ? AppColors.warning.withValues(alpha: 0.1) : AppColors.success.withValues(alpha: 0.1),
+                    color: _getStatusColor(status).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    isLate ? 'Late' : 'Present',
+                    status,
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: isLate ? AppColors.warning : AppColors.success,
+                      color: _getStatusColor(status),
                     ),
                   ),
                 ),
@@ -274,18 +317,24 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
             padding: const EdgeInsets.all(16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   flex: 3, 
-                  child: _buildDetailColumn("Session Timing", isLate ? "09:15 AM - 06:00 PM" : "09:00 AM - 06:00 PM")
+                  child: _buildDetailColumn("Session Timing", "$clockIn - $clockOut")
                 ),
                 Expanded(
                   flex: 2, 
-                  child: _buildDetailColumn("Break Total", "45 Min", alignCenter: true)
+                  child: _buildDetailColumn("Break", "${breakMinutes}m", alignCenter: true)
                 ),
                 Expanded(
                   flex: 2, 
-                  child: _buildDetailColumn("Work Hours", isLate ? "7h 45m" : "8h 00m", isHighlight: true, alignRight: true)
+                  child: _buildDetailColumn(
+                    "Work Hours", 
+                    isActive ? "IN PROGRESS" : "${(workMinutes/60).floor()}h ${workMinutes%60}m", 
+                    isHighlight: true, 
+                    alignRight: true
+                  )
                 ),
               ],
             ),
@@ -293,6 +342,15 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
         ],
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    status = status.toLowerCase();
+    if (status.contains('late')) return AppColors.warning;
+    if (status.contains('absent')) return AppColors.error;
+    if (status.contains('present')) return AppColors.success;
+    if (status.contains('leave') || status.contains('off')) return Colors.purple;
+    return AppColors.info;
   }
 
   Widget _buildDetailColumn(String label, String value, {bool isHighlight = false, bool alignRight = false, bool alignCenter = false}) {

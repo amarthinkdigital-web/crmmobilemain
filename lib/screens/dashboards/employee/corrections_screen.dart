@@ -2,40 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../theme/app_theme.dart';
-import 'shift_state.dart';
-
-
 import '../../../services/api_service.dart';
 
 class CorrectionsScreen extends StatefulWidget {
-  final ShiftState shiftState;
-  final String liveTime;
-  final String formattedWorked;
-  final String formattedBreak;
-  final String timerStatusText;
-  final double timerProgress;
-  final Animation<double> pulseAnim;
-  final List<dynamic> activityLog;
-  final VoidCallback onClockIn;
-  final VoidCallback onClockOut;
-  final VoidCallback onBreakIn;
-  final VoidCallback onBreakOut;
-
-  const CorrectionsScreen({
-    super.key,
-    required this.shiftState,
-    required this.liveTime,
-    required this.formattedWorked,
-    required this.formattedBreak,
-    required this.timerStatusText,
-    required this.timerProgress,
-    required this.pulseAnim,
-    required this.activityLog,
-    required this.onClockIn,
-    required this.onClockOut,
-    required this.onBreakIn,
-    required this.onBreakOut,
-  });
+  const CorrectionsScreen({super.key});
 
   @override
   State<CorrectionsScreen> createState() => _CorrectionsScreenState();
@@ -46,7 +16,29 @@ class _CorrectionsScreenState extends State<CorrectionsScreen> {
   TimeOfDay _clockIn = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _clockOut = const TimeOfDay(hour: 18, minute: 0);
   final _reasonController = TextEditingController();
+  
+  List<dynamic> _myRequests = [];
+  bool _isLoading = true;
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    final res = await ApiService.getMyCorrections();
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        if (res['error'] == false) {
+          _myRequests = res['data'] ?? [];
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -72,17 +64,19 @@ class _CorrectionsScreenState extends State<CorrectionsScreen> {
     setState(() => _isSubmitting = false);
 
     if (res['error'] == false) {
-      _showToast("Correction request submitted!");
+      _showToast("Regulation request submitted!");
       _reasonController.clear();
+      _fetchData();
     } else {
-      _showToast(res['message'], isError: true);
+      _showToast(res['message'] ?? "Submission failed", isError: true);
     }
   }
 
   String _formatTime(TimeOfDay t) {
-    final now = DateTime.now();
-    final dt = DateTime(now.year, now.month, now.day, t.hour, t.minute);
-    return DateFormat('HH:mm:ss').format(dt);
+    // API expects HH:mm (e.g. 09:30)
+    final hours = t.hour.toString().padLeft(2, '0');
+    final minutes = t.minute.toString().padLeft(2, '0');
+    return "$hours:$minutes";
   }
 
   void _showToast(String msg, {bool isError = false}) {
@@ -99,59 +93,28 @@ class _CorrectionsScreenState extends State<CorrectionsScreen> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
-          const SizedBox(height: 20),
-          _buildStatusCards(),
-          const SizedBox(height: 28),
-          _buildTimerRing(),
-          const SizedBox(height: 28),
-          _buildActionButtons(),
           const SizedBox(height: 32),
-          _buildCorrectionForm(),
-          const SizedBox(height: 32),
-          _buildActivityLog(),
+          _buildRegulationForm(),
+          const SizedBox(height: 40),
+          _buildRequestsTable(),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Corrections & Attendance',
-          style: GoogleFonts.inter(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: AppColors.navy,
-          ),
-        ),
-        Text(
-          'Manage your shift and timer here',
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            color: AppColors.grey400,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCorrectionForm() {
+  Widget _buildRegulationForm() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: AppColors.grey100),
-        boxShadow: [
-          BoxShadow(color: AppColors.navy.withValues(alpha: 0.03), blurRadius: 20, offset: const Offset(0, 10)),
-        ],
+        boxShadow: [BoxShadow(color: AppColors.navy.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,66 +122,44 @@ class _CorrectionsScreenState extends State<CorrectionsScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: AppColors.gold.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.edit_calendar_rounded, color: AppColors.gold, size: 20),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: AppColors.gold.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.edit_note_rounded, color: AppColors.gold, size: 22),
               ),
-              const SizedBox(width: 12),
-              Text('Manual Correction', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.navy)),
+              const SizedBox(width: 14),
+              Text('New Regulation Request', style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.navy)),
             ],
           ),
-          const SizedBox(height: 20),
-          _buildFormRow('Date', DateFormat('MMM dd, yyyy').format(_selectedDate), Icons.calendar_today_rounded, () async {
-            final d = await showDatePicker(context: context, initialDate: _selectedDate, firstDate: DateTime(2025), lastDate: DateTime.now());
-            if (d != null) setState(() => _selectedDate = d);
-          }),
-          const SizedBox(height: 12),
+          const SizedBox(height: 24),
+          _buildLabel("Select Date"),
+          _buildDateSelector(),
+          const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(
-                child: _buildFormRow('In', _clockIn.format(context), Icons.login_rounded, () async {
-                  final t = await showTimePicker(context: context, initialTime: _clockIn);
-                  if (t != null) setState(() => _clockIn = t);
-                }),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildFormRow('Out', _clockOut.format(context), Icons.logout_rounded, () async {
-                  final t = await showTimePicker(context: context, initialTime: _clockOut);
-                  if (t != null) setState(() => _clockOut = t);
-                }),
-              ),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildLabel("Clock In"), _buildTimeSelector(true)])),
+              const SizedBox(width: 16),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildLabel("Clock Out"), _buildTimeSelector(false)])),
             ],
           ),
           const SizedBox(height: 16),
-          Text('Reason', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.grey400)),
-          const SizedBox(height: 8),
+          _buildLabel("Reason"),
           TextField(
             controller: _reasonController,
-            maxLines: 2,
-            style: GoogleFonts.inter(fontSize: 14),
+            maxLines: 3,
             decoration: InputDecoration(
-              hintText: 'e.g. Forgot to clock in...',
-              filled: true,
-              fillColor: AppColors.offWhite,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              hintText: 'Describe why this correction is needed...',
+              filled: true, fillColor: AppColors.offWhite,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.all(16),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               onPressed: _isSubmitting ? null : _submitCorrection,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.navy,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
-              child: _isSubmitting 
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : Text('Submit Request', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+              child: _isSubmitting ? const CircularProgressIndicator(color: Colors.white) : const Text('Submit Request', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -226,354 +167,62 @@ class _CorrectionsScreenState extends State<CorrectionsScreen> {
     );
   }
 
-  Widget _buildFormRow(String label, String value, IconData icon, VoidCallback onTap) {
+  Widget _buildRequestsTable() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.grey400)),
-        const SizedBox(height: 6),
-        InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: [
-                Icon(icon, size: 14, color: AppColors.grey400),
-                const SizedBox(width: 10),
-                Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.navy)),
-                const Spacer(),
-                const Icon(Icons.arrow_drop_down_rounded, color: AppColors.grey400),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusCards() {
-    String shiftLabel;
-    Color shiftBadgeColor;
-    String shiftBadgeText;
-
-    switch (widget.shiftState) {
-      case ShiftState.working:
-        shiftLabel = 'Working';
-        shiftBadgeColor = AppColors.success;
-        shiftBadgeText = 'Active';
-        break;
-      case ShiftState.onBreak:
-        shiftLabel = 'On Break';
-        shiftBadgeColor = AppColors.warning;
-        shiftBadgeText = 'Break';
-        break;
-      case ShiftState.idle:
-        shiftLabel = 'Not Clocked In';
-        shiftBadgeColor = AppColors.grey400;
-        shiftBadgeText = 'Inactive';
-        break;
-    }
-
-    return Column(
-      children: [
-        _StatusCard(
-          icon: Icons.access_time_rounded,
-          iconBgColor: AppColors.navy.withValues(alpha: 0.08),
-          iconColor: AppColors.navy,
-          label: 'Shift Status',
-          value: shiftLabel,
-          badge: shiftBadgeText,
-          badgeColor: shiftBadgeColor,
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _StatusCard(
-                icon: Icons.bar_chart_rounded,
-                iconBgColor: AppColors.gold.withValues(alpha: 0.12),
-                iconColor: AppColors.gold,
-                label: 'Hours Today',
-                value: widget.formattedWorked,
-                compact: true,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _StatusCard(
-                icon: Icons.coffee_rounded,
-                iconBgColor: AppColors.warning.withValues(alpha: 0.12),
-                iconColor: AppColors.warning,
-                label: 'Break Time',
-                value: widget.formattedBreak,
-                compact: true,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTimerRing() {
-    final isActive = widget.shiftState != ShiftState.idle;
-    final isBreak = widget.shiftState == ShiftState.onBreak;
-    Color ringColor = isBreak
-        ? AppColors.warning
-        : (isActive ? AppColors.success : AppColors.grey200);
-
-    return Center(
-      child: ScaleTransition(
-        scale: isActive ? widget.pulseAnim : const AlwaysStoppedAnimation(1.0),
-        child: Container(
-          width: 200,
-          height: 200,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.white,
-            boxShadow: [
-              BoxShadow(
-                color: ringColor.withValues(alpha: isActive ? 0.2 : 0.05),
-                blurRadius: isActive ? 40 : 20,
-              ),
-            ],
-          ),
-          child: CustomPaint(
-            painter: _RingPainter(
-              progress: widget.timerProgress,
-              color: ringColor,
-              bgColor: AppColors.grey100,
-            ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isBreak ? 'Break' : 'Shift',
-                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400),
-                  ),
-                  Text(
-                    isBreak ? widget.formattedBreak : widget.formattedWorked,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                  Text(
-                    widget.timerStatusText,
-                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: ringColor),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    final isIdle = widget.shiftState == ShiftState.idle;
-    final isWorking = widget.shiftState == ShiftState.working;
-    final isOnBreak = widget.shiftState == ShiftState.onBreak;
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _ActionButton(
-                label: 'Clock In',
-                icon: Icons.login_rounded,
-                color: AppColors.success,
-                enabled: isIdle,
-                onPressed: widget.onClockIn,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ActionButton(
-                label: 'Clock Out',
-                icon: Icons.logout_rounded,
-                color: AppColors.error,
-                enabled: isWorking,
-                onPressed: widget.onClockOut,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _ActionButton(
-                label: 'Break In',
-                icon: Icons.coffee_rounded,
-                color: AppColors.warning,
-                enabled: isWorking,
-                onPressed: widget.onBreakIn,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ActionButton(
-                label: 'Break Out',
-                icon: Icons.play_arrow_rounded,
-                color: AppColors.info,
-                enabled: isOnBreak,
-                onPressed: widget.onBreakOut,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActivityLog() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Shift Activity",
-          style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.navy),
-        ),
-        const SizedBox(height: 14),
-        if (widget.activityLog.isEmpty)
-          const Text('No activity today', style: TextStyle(color: Colors.grey))
+        Text("Regulation History", style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
+        const SizedBox(height: 16),
+        if (_isLoading)
+          const Center(child: CircularProgressIndicator(color: AppColors.navy))
+        else if (_myRequests.isEmpty)
+          Center(child: Text("No records yet", style: TextStyle(color: AppColors.grey400, fontSize: 13)))
         else
-          ...widget.activityLog.map((entry) => ListTile(
-                leading: Icon(entry.icon, color: entry.color),
-                title: Text(entry.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(entry.time),
-              )),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColors.grey100)),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text("DATE")),
+                  DataColumn(label: Text("IN")),
+                  DataColumn(label: Text("OUT")),
+                  DataColumn(label: Text("STATUS")),
+                  DataColumn(label: Text("ADMIN REMARK")),
+                  DataColumn(label: Text("APPLIED ON")),
+                ],
+                rows: _myRequests.map((req) {
+                  final status = (req['status'] ?? 'pending').toString().toLowerCase();
+                  Color statusColor = AppColors.warning;
+                  if (status == 'approved') statusColor = AppColors.success;
+                  if (status == 'rejected') statusColor = AppColors.error;
+
+                  return DataRow(cells: [
+                     DataCell(Text(req['date'] ?? "-")),
+                     DataCell(Text(req['clock_in'] ?? "-")),
+                     DataCell(Text(req['clock_out'] ?? "-")),
+                     DataCell(Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                        child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.w800, fontSize: 10)),
+                     )),
+                     DataCell(Text(req['admin_remark'] ?? "-")),
+                     DataCell(Text(req['created_at'] != null ? DateFormat('MMM dd').format(DateTime.tryParse(req['created_at']) ?? DateTime.now()) : "N/A")),
+                  ]);
+                }).toList(),
+              ),
+            ),
+          ),
       ],
     );
   }
-}
 
-// Supporting UI Classes (Simplified Copies)
+  Widget _buildLabel(String l) => Padding(padding: const EdgeInsets.only(left: 4, bottom: 8), child: Text(l, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.grey600)));
+  
+  Widget _buildHeader() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Attendance Regulation Requests', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.navy)), const SizedBox(height: 4), Text('Submit and track your attendance adjustment requests', style: GoogleFonts.inter(fontSize: 14, color: AppColors.grey400))]);
 
-class _StatusCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconBgColor;
-  final Color iconColor;
-  final String label;
-  final String value;
-  final String? badge;
-  final Color? badgeColor;
-  final bool compact;
+  Widget _buildDateSelector() => InkWell(onTap: () async { final d = await showDatePicker(context: context, initialDate: _selectedDate, firstDate: DateTime(2025), lastDate: DateTime.now()); if (d != null) setState(() => _selectedDate = d); }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(16)), child: Row(children: [const Icon(Icons.calendar_month, color: AppColors.grey400, size: 18), const SizedBox(width: 12), Text(DateFormat('yyyy-MM-dd').format(_selectedDate), style: const TextStyle(fontWeight: FontWeight.bold)), const Spacer(), const Icon(Icons.arrow_drop_down)])));
 
-  const _StatusCard({
-    required this.icon,
-    required this.iconBgColor,
-    required this.iconColor,
-    required this.label,
-    required this.value,
-    this.badge,
-    this.badgeColor,
-    this.compact = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(compact ? 12 : 16),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.grey100),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: iconBgColor, borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: iconColor, size: compact ? 18 : 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 11, color: AppColors.grey400)),
-                Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              ],
-            ),
-          ),
-          if (badge != null)
-             Text(badge!, style: TextStyle(color: badgeColor, fontWeight: FontWeight.bold, fontSize: 10)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.4,
-      child: InkWell(
-        onTap: enabled ? onPressed : null,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: enabled ? color.withValues(alpha: 0.1) : Colors.grey[200],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 18, color: enabled ? color : Colors.grey),
-              const SizedBox(width: 8),
-              Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: enabled ? color : Colors.grey)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Color bgColor;
-
-  _RingPainter({required this.progress, required this.color, required this.bgColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 8;
-    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 6.0;
-
-    canvas.drawCircle(center, radius, paint..color = bgColor);
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -1.5708, 6.2831 * progress, false,
-      paint..color = color..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RingPainter old) => old.progress != progress;
+  Widget _buildTimeSelector(bool isIn) => InkWell(onTap: () async { final t = await showTimePicker(context: context, initialTime: isIn ? _clockIn : _clockOut); if (t != null) setState(() => isIn ? _clockIn = t : _clockOut = t); }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(16)), child: Row(children: [Icon(isIn ? Icons.login : Icons.logout, color: AppColors.grey400, size: 16), const SizedBox(width: 10), Text((isIn ? _clockIn : _clockOut).format(context), style: const TextStyle(fontWeight: FontWeight.bold))])));
 }

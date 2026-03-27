@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Live Backend: http://192.168.1.12:8000/api
@@ -227,12 +228,20 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> getAllAttendances() async {
+  static Future<Map<String, dynamic>> getAllAttendances({String? date, String? userId, String? startDate, String? endDate}) async {
     try {
       final headers = await _headers();
+      String url = '$baseUrl/attendance/all-attendances';
+      List<String> params = [];
+      if (date != null) params.add('date=$date');
+      if (userId != null) params.add('user_id=$userId');
+      if (startDate != null) params.add('start_date=$startDate');
+      if (endDate != null) params.add('end_date=$endDate');
+      if (params.isNotEmpty) url += '?' + params.join('&');
+
       final response = await http
           .get(
-            Uri.parse('$baseUrl/attendance/all-attendances'),
+            Uri.parse(url),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
@@ -278,19 +287,16 @@ class ApiService {
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
         List list = [];
-        if (data is List) {
+        if (data is Map && data['data'] is List) {
+          list = data['data'];
+        } else if (data is List) {
           list = data;
-        } else if (data is Map) {
-          if (data['data'] is List) {
-            list = data['data'];
-          } else if (data['data'] is Map && data['data']['data'] is List) {
-            list = data['data']['data'];
-          } else {
-            for (var val in data.values) {
-              if (val is List) {
-                list = val;
-                break;
-              }
+        } else {
+          // Fallback extraction
+          for (var val in data.values) {
+            if (val is List) {
+              list = val;
+              break;
             }
           }
         }
@@ -302,6 +308,39 @@ class ApiService {
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getTodayAttendance() async {
+    try {
+      final res = await getMyAttendance();
+      if (res['error'] == false) {
+        final List list = res['data'] ?? [];
+        if (list.isNotEmpty) {
+          // Trust the first record (most recent) if it's NOT clocked out
+          // or if its date component matches what we consider today.
+          final first = list.first;
+          
+          // If active shift exists, it should be the one.
+          if (first['clock_out'] == null) {
+             return {'error': false, 'data': first};
+          }
+
+          final now = DateTime.now();
+          final String recordDateStr = first['date']?.toString() ?? '';
+          final dt = DateTime.parse(recordDateStr).toLocal();
+          final todayStr = DateFormat('yyyy-MM-dd').format(now);
+          final recordDateComp = DateFormat('yyyy-MM-dd').format(dt);
+          
+          if (recordDateComp == todayStr) {
+            return {'error': false, 'data': first};
+          }
+        }
+        return {'error': false, 'data': null};
+      }
+      return res;
+    } catch (e) {
+      return {'error': true, 'message': e.toString()};
     }
   }
 
@@ -347,22 +386,6 @@ class ApiService {
     }
   }
 
-  // ─── Status ────────────────────────────────────────────────────────────────
-
-  static Future<Map<String, dynamic>> getStatus() async {
-    try {
-      final headers = await _headers();
-      final response = await http
-          .get(Uri.parse('$baseUrl/attendance/status'), headers: headers)
-          .timeout(const Duration(seconds: 8));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {'status': data['status'] ?? 'idle', ...data};
-      }
-    } catch (_) {}
-    return {'status': 'idle'};
-  }
 
   static Future<Map<String, dynamic>> submitCorrection({
     required String date,
@@ -374,7 +397,7 @@ class ApiService {
       final headers = await _headers();
       final response = await http
           .post(
-            Uri.parse('$baseUrl/attendance/correction'),
+            Uri.parse('$baseUrl/attendance/correction/requests'),
             headers: headers,
             body: jsonEncode({
               'date': date,
@@ -385,7 +408,9 @@ class ApiService {
           )
           .timeout(const Duration(seconds: 10));
 
-      final data = jsonDecode(response.body);
+      final dynamic decoded = response.body.isNotEmpty ? jsonDecode(response.body) : {};
+      final data = decoded is Map<String, dynamic> ? decoded : {'data': decoded};
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'error': false, ...data};
       }
@@ -396,6 +421,84 @@ class ApiService {
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
     }
+  }
+
+  static Future<Map<String, dynamic>> getMyCorrections() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/attendance/correction/my-requests'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['status'] == 'success') {
+        // Doc says data['data'] contains the paginated object, so data['data']['data'] is the list
+        return {'error': false, 'data': data['data']['data'] ?? []};
+      }
+    } catch (_) {}
+    return {'error': true, 'message': 'Failed to load corrections'};
+  }
+
+  static Future<Map<String, dynamic>> getAdminCorrections({String status = 'pending', String? search}) async {
+    try {
+      final headers = await _headers();
+      String url = '$baseUrl/attendance/correction/admin/requests?status=$status';
+      if (search != null && search.isNotEmpty) url += '&search=$search';
+
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        // Assuming same paginated structure or flat list
+        return {'error': false, 'data': data['data']['data'] ?? data['data'] ?? []};
+      }
+    } catch (_) {}
+    return {'error': true, 'message': 'Failed to load admin corrections'};
+  }
+
+  static Future<Map<String, dynamic>> updateCorrectionStatus(int id, String status, String remark) async {
+    try {
+      final headers = await _headers();
+      // Try to determine if we are manager or admin from token/shared_prefs or just try the admin route
+      // and fallback if needed. Usually, the backend detects role.
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/attendance/correction/admin/requests/$id/status'),
+            headers: headers,
+            body: jsonEncode({
+              'status': status,
+              'admin_remark': remark,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+      
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['status'] == 'success') {
+        return {'error': false, 'message': data['message']};
+      }
+      return {'error': true, 'message': data['message'] ?? 'Failed to update status'};
+    } catch (_) {}
+    return {'error': true, 'message': 'Failed to update status'};
+  }
+
+  static Future<Map<String, dynamic>> getManagerCorrections({String status = 'pending'}) async {
+    try {
+      final headers = await _headers();
+      // Assume manager has their own endpoint for their team
+      String url = '$baseUrl/attendance/correction/manager/requests?status=$status';
+
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'error': false, 'data': data['data']['data'] ?? data['data'] ?? []};
+      }
+    } catch (_) {}
+    return {'error': true, 'message': 'Failed to load manager corrections'};
   }
 
   // ─── Manager Profiles ──────────────────────────────────────────────────────

@@ -4,6 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/api_service.dart';
 import '../../../services/auth_service.dart';
+import '../attendance_action_card.dart';
+import 'modules/business_leads_screen.dart';
+import 'modules/client_directory_screen.dart';
+import 'modules/project_details_screen.dart';
+import 'modules/support_tickets_screen.dart';
+
 
 class ManagerIndividualDashboard extends StatefulWidget {
   final String userName;
@@ -107,18 +113,25 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildProfileHeader(),
+            const SizedBox(height: 24),
+            const AttendanceActionCard(),
             const SizedBox(height: 32),
             _buildPerformanceStats(),
             const SizedBox(height: 32),
             _buildSectionHeader("Operational Insights", "Key Performance Trends"),
             const SizedBox(height: 16),
             _buildEfficiencyChart(),
+            const SizedBox(height: 32),
+            _buildSectionHeader("Business Management", "Strategic operations & growth"),
+            const SizedBox(height: 16),
+            _buildBusinessModules(),
             const SizedBox(height: 24),
             _buildHoursTrend(),
             const SizedBox(height: 32),
             _buildSectionHeader("Recent Activities", "Management log highlights"),
             const SizedBox(height: 16),
             _buildRecentActivity(),
+
           ],
         ),
       ),
@@ -419,22 +432,25 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.navy,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
                     ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400),
-                  ),
-                ],
+                    Text(
+                      subtitle,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400),
+                    ),
+                  ],
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -503,7 +519,117 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
     );
   }
 
+  Widget _buildBusinessModules() {
+    final List<Map<String, dynamic>> modules = [
+      {
+        'title': 'Business Leads',
+        'subtitle': 'Growth tracking',
+        'icon': Icons.leaderboard_rounded,
+        'color': AppColors.info,
+        'screen': const BusinessLeadsScreen(),
+      },
+      {
+        'title': 'Client Directory',
+        'subtitle': 'Contacts matrix',
+        'icon': Icons.contact_mail_rounded,
+        'color': AppColors.gold,
+        'screen': const ClientDirectoryScreen(),
+      },
+      {
+        'title': 'Project Details',
+        'subtitle': 'Portfolio data',
+        'icon': Icons.rocket_launch_rounded,
+        'color': AppColors.success,
+        'screen': const ProjectDetailsScreen(),
+      },
+      {
+        'title': 'Support Tickets',
+        'subtitle': 'Issue resolution',
+        'icon': Icons.confirmation_number_rounded,
+        'color': AppColors.warning,
+        'screen': const SupportTicketsScreen(),
+      },
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        mainAxisExtent: 130,
+      ),
+      itemCount: modules.length,
+      itemBuilder: (context, index) {
+        final module = modules[index];
+        return InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => module['screen']),
+            );
+          },
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.grey100, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: module['color'].withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: module['color'].withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(module['icon'], color: module['color'], size: 24),
+                ),
+                const SizedBox(height: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      module['title'],
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    Text(
+                      module['subtitle'],
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: AppColors.grey400,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildActivityItem(String title, String type, String time, IconData icon, Color color) {
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(

@@ -116,7 +116,7 @@ class _TaskTrackingScreenState extends State<TaskTrackingScreen> {
       bool matchesDate = true;
       if (selectedDate != null) {
         try {
-          final taskDate = DateTime.parse(t['dueDate']);
+          final taskDate = DateTime.parse(t['dueDate']).toLocal();
           matchesDate = taskDate.year == selectedDate!.year && 
                         taskDate.month == selectedDate!.month && 
                         taskDate.day == selectedDate!.day;

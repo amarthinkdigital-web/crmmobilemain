@@ -69,7 +69,7 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
     if (startDateStr == null || startDateStr == '-') return false;
 
     try {
-      final startDate = DateTime.parse(startDateStr);
+      final startDate = DateTime.parse(startDateStr).toLocal();
       final month = startDate.month;
       final year = startDate.year;
 
@@ -83,7 +83,7 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
         if (status.contains('approved') && status.contains('paid')) {
           final rStartDateStr = r['start_date']?.toString();
           if (rStartDateStr != null && rStartDateStr != '-') {
-            final rStartDate = DateTime.parse(rStartDateStr);
+            final rStartDate = DateTime.parse(rStartDateStr).toLocal();
             if (rStartDate.month == month && rStartDate.year == year) {
               return true;
             }

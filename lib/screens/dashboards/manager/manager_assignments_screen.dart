@@ -129,13 +129,13 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
       
       bool matchesDate = true;
       if (_dateFilter != 'Task Given To Date') {
-        final now = DateTime.now();
         DateTime? taskDate;
         try {
-          taskDate = DateTime.parse(t['due']);
+          taskDate = DateTime.parse(t['due']).toLocal();
         } catch (_) {}
 
         if (taskDate != null) {
+          final now = DateTime.now();
           if (_dateFilter == 'Today') {
             matchesDate = taskDate.year == now.year && taskDate.month == now.month && taskDate.day == now.day;
           } else if (_dateFilter == 'This Week') {

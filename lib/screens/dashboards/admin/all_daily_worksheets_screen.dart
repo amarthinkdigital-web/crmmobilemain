@@ -330,7 +330,7 @@ class _AllDailyWorksheetsScreenState extends State<AllDailyWorksheetsScreen> {
   ) {
     DateTime date;
     try {
-      date = DateTime.parse(dateStr);
+      date = DateTime.parse(dateStr).toLocal();
     } catch (e) {
       date = DateTime.now();
     }

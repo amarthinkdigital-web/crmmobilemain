@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../theme/app_theme.dart';
+import '../../../services/api_service.dart';
 
 class ManagerAttendanceScreen extends StatefulWidget {
   const ManagerAttendanceScreen({super.key});
@@ -12,53 +13,37 @@ class ManagerAttendanceScreen extends StatefulWidget {
 }
 
 class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
-  final List<Map<String, String>> _logs = [
-    {
-      'date': '2026-03-09',
-      'in': '09:02 AM',
-      'out': '06:15 PM',
-      'hours': '8h 43m',
-      'break': '00h 30m',
-      'status': 'Present',
-    },
-    {
-      'date': '2026-03-07',
-      'in': '09:10 AM',
-      'out': '06:00 PM',
-      'hours': '8h 20m',
-      'break': '00h 30m',
-      'status': 'Late',
-    },
-    {
-      'date': '2026-03-06',
-      'in': '09:45 AM',
-      'out': '04:30 PM',
-      'hours': '6h 15m',
-      'break': '00h 30m',
-      'status': 'Half Day',
-    },
-    {
-      'date': '2026-03-05',
-      'in': '08:55 AM',
-      'out': '06:30 PM',
-      'hours': '9h 05m',
-      'break': '00h 30m',
-      'status': 'Present',
-    },
-    {
-      'date': '2026-03-04',
-      'in': '-',
-      'out': '-',
-      'hours': '-',
-      'break': '-',
-      'status': 'Absent',
-    },
-  ];
+  List<Map<String, dynamic>> _logs = [];
+  bool _isLoading = true;
 
   String _selectedMonth = 'March';
   String _selectedYear = '2026';
   String _selectedStatus = 'All Status';
   DateTime? _selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLogs();
+  }
+
+  Future<void> _fetchLogs() async {
+    setState(() => _isLoading = true);
+    final res = await ApiService.getMyAttendance();
+    if (mounted) {
+      if (res['error'] == false) {
+        setState(() {
+          _logs = List<Map<String, dynamic>>.from(res['data'] ?? []);
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? 'Failed to load logs')),
+        );
+      }
+    }
+  }
 
   final List<String> _months = [
     'January',
@@ -391,6 +376,15 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   }
 
   Widget _buildLogsList() {
+    if (_isLoading) return const Center(child: Padding(
+      padding: EdgeInsets.all(40.0),
+      child: CircularProgressIndicator(color: AppColors.navy),
+    ));
+    if (_logs.isEmpty) return Center(child: Padding(
+      padding: const EdgeInsets.all(40.0),
+      child: Text("No records found", style: GoogleFonts.inter(color: AppColors.grey400)),
+    ));
+
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -402,12 +396,19 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     );
   }
 
-  Widget _buildLogCard(Map<String, String> log) {
+  Widget _buildLogCard(Map<String, dynamic> log) {
+    final bool isActive = log['clock_out'] == null;
+    final status = log['attendance_status']?.toString().replaceAll('_', ' ').toUpperCase() ?? (isActive ? 'WORKING' : 'PRESENT');
+    final clockIn = log['clock_in'] != null ? DateFormat('hh:mm A').format(DateTime.parse(log['clock_in']).toLocal()) : '—';
+    final clockOut = !isActive ? DateFormat('hh:mm A').format(DateTime.parse(log['clock_out']).toLocal()) : 'IN PROGRESS';
+    final int workMinutes = int.tryParse(log['total_work_minutes']?.toString() ?? '0') ?? 0;
+    final int breakMinutes = int.tryParse(log['total_break_minutes']?.toString() ?? '0') ?? 0;
+
     Color statusColor = AppColors.grey400;
-    if (log['status'] == 'Present') statusColor = AppColors.success;
-    if (log['status'] == 'Late') statusColor = AppColors.warning;
-    if (log['status'] == 'Half Day') statusColor = AppColors.goldDark;
-    if (log['status'] == 'Absent') statusColor = AppColors.error;
+    if (status.contains('PRESENT') || status.contains('WORKING')) statusColor = AppColors.success;
+    if (status.contains('LATE')) statusColor = AppColors.warning;
+    if (status.contains('HALF')) statusColor = AppColors.goldDark;
+    if (status.contains('ABSENT')) statusColor = AppColors.error;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -446,9 +447,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      DateFormat(
-                        'EEEE, MMM dd',
-                      ).format(DateTime.parse(log['date']!)),
+                      _formatRawDate(log['date']?.toString() ?? ''),
                       style: GoogleFonts.inter(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -468,7 +467,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  log['status']!,
+                  status,
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -484,10 +483,10 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildTimeColumn("Clock In", log['in']!),
-              _buildTimeColumn("Clock Out", log['out']!),
-              _buildTimeColumn("Break", log['break']!),
-              _buildTimeColumn("Total", log['hours']!, isHighlight: true),
+              _buildTimeColumn("Clock In", clockIn),
+              _buildTimeColumn("Clock Out", clockOut),
+              _buildTimeColumn("Break", "${breakMinutes}m"),
+              _buildTimeColumn("Total", !isActive ? "${(workMinutes/60).floor()}h ${workMinutes%60}m" : "ACTIVE", isHighlight: true),
             ],
           ),
         ],
@@ -522,5 +521,15 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
         ),
       ],
     );
+  }
+
+  String _formatRawDate(String raw) {
+    if (raw.isEmpty) return "—";
+    try {
+      final date = DateTime.parse(raw).toLocal();
+      return DateFormat('EEEE, MMM dd').format(date);
+    } catch (e) {
+      return raw;
+    }
   }
 }
