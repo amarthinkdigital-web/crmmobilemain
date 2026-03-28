@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../services/api_service.dart';
 
 class ClientDirectoryScreen extends StatefulWidget {
   const ClientDirectoryScreen({super.key});
@@ -11,129 +12,182 @@ class ClientDirectoryScreen extends StatefulWidget {
 
 class _ClientDirectoryScreenState extends State<ClientDirectoryScreen> {
   final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _clients = [];
+  bool _isLoading = true;
 
-  final List<Map<String, dynamic>> _clients = [
-    {
-      'name': 'Sarah Williams',
-      'company': 'Global Industries',
-      'phone': '+1 (555) 123-4567',
-      'email': 'sarah@global.com',
-      'location': 'New York, USA',
-      'status': 'Active'
-    },
-    {
-      'name': 'Michael Chen',
-      'company': 'InnoSoft',
-      'phone': '+1 (555) 987-6543',
-      'email': 'michael@innosoft.io',
-      'location': 'San Francisco, USA',
-      'status': 'Active'
-    },
-    {
-      'name': 'Alex Johnson',
-      'company': 'Tech Corp',
-      'phone': '+1 (555) 456-7890',
-      'email': 'alex@techcorp.com',
-      'location': 'London, UK',
-      'status': 'Disabled'
-    },
-    {
-      'name': 'Emily Davis',
-      'company': 'BlueSky Ltd',
-      'phone': '+1 (555) 321-0987',
-      'email': 'emily@bluesky.net',
-      'location': 'Sydney, Australia',
-      'status': 'Active'
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchClients();
+  }
+
+  Future<void> _fetchClients() async {
+    setState(() => _isLoading = true);
+    final res = await ApiService.getClientProfiles();
+    if (mounted) {
+      setState(() {
+        _clients = res['data'] ?? [];
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleAccess(dynamic client, bool currentAccess) async {
+    final res = await ApiService.togglePortalAccess(client['id'], !currentAccess);
+    if (mounted) {
+      if (res['error'] == false) {
+        _fetchClients();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'])));
+      }
+    }
+  }
 
   void _showAddClientDialog() {
-    final nameController = TextEditingController();
-    final companyController = TextEditingController();
-    final phoneController = TextEditingController();
+    // Required fields as per API:
+    // company_name, email, password, contact_person_name, phone, designation
+    // industry, services_opted, client_type, address_line_1, city, state, pin_code, country
+    // billing_email, payment_terms, payment_status, manager_id, department_id
+    
+    final companyNameController = TextEditingController();
     final emailController = TextEditingController();
-    final locationController = TextEditingController();
+    final passwordController = TextEditingController();
+    final contactPersonController = TextEditingController();
+    final phoneController = TextEditingController();
+    final designationController = TextEditingController();
+    final industryController = TextEditingController();
+    final servicesController = TextEditingController();
+    final clientTypeController = TextEditingController();
+    final addressController = TextEditingController();
+    final cityController = TextEditingController();
+    final stateController = TextEditingController();
+    final pinCodeController = TextEditingController();
+    final countryController = TextEditingController();
+    final billingEmailController = TextEditingController();
+    final paymentTermsController = TextEditingController();
+    final paymentStatusController = TextEditingController();
+    final managerIdController = TextEditingController();
+    final departmentIdController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: AppColors.white,
-        child: SingleChildScrollView(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 "Add New Client",
-                style: GoogleFonts.inter(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.navy,
+                style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.navy),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildInputField("Company Name", Icons.business, companyNameController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Email", Icons.email, emailController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Password", Icons.lock, passwordController, isPassword: true),
+                      const SizedBox(height: 12),
+                      _buildInputField("Contact Person Name", Icons.person, contactPersonController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Phone", Icons.phone, phoneController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Designation", Icons.work, designationController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Industry", Icons.factory, industryController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Services Opted", Icons.miscellaneous_services, servicesController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Client Type", Icons.category, clientTypeController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Address Line 1", Icons.location_on, addressController),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: _buildInputField("City", Icons.map, cityController)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _buildInputField("State", Icons.map, stateController)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: _buildInputField("Pin Code", Icons.numbers, pinCodeController)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _buildInputField("Country", Icons.public, countryController)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _buildInputField("Billing Email", Icons.receipt_long, billingEmailController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Payment Terms", Icons.payment, paymentTermsController),
+                      const SizedBox(height: 12),
+                      _buildInputField("Payment Status", Icons.info, paymentStatusController),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: _buildInputField("Manager ID", Icons.person_search, managerIdController)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _buildInputField("Dept ID", Icons.groups, departmentIdController)),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
-              _buildInputField("Full Name", Icons.person_rounded, nameController),
-              const SizedBox(height: 16),
-              _buildInputField("Company Name", Icons.business_rounded, companyController),
-              const SizedBox(height: 16),
-              _buildInputField("Phone Number", Icons.phone_rounded, phoneController),
-              const SizedBox(height: 16),
-              _buildInputField("Email Address", Icons.email_rounded, emailController),
-              const SizedBox(height: 16),
-              _buildInputField("Location", Icons.location_on_rounded, locationController),
-              const SizedBox(height: 32),
               Row(
                 children: [
                   Expanded(
                     child: TextButton(
                       onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          side: const BorderSide(color: AppColors.grey100),
-                        ),
-                      ),
-                      child: Text(
-                        "Cancel",
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.grey600,
-                        ),
-                      ),
+                      child: const Text("Cancel"),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _clients.insert(0, {
-                            'name': nameController.text,
-                            'company': companyController.text,
-                            'phone': phoneController.text,
-                            'email': emailController.text,
-                            'location': locationController.text,
-                            'status': 'Active',
-                          });
+                      onPressed: () async {
+                        final res = await ApiService.createClientProfile({
+                          'company_name': companyNameController.text,
+                          'email': emailController.text,
+                          'password': passwordController.text,
+                          'contact_person_name': contactPersonController.text,
+                          'phone': phoneController.text,
+                          'designation': designationController.text,
+                          'industry': industryController.text,
+                          'services_opted': servicesController.text,
+                          'client_type': clientTypeController.text,
+                          'address_line_1': addressController.text,
+                          'city': cityController.text,
+                          'state': stateController.text,
+                          'pin_code': pinCodeController.text,
+                          'country': countryController.text,
+                          'billing_email': billingEmailController.text,
+                          'payment_terms': paymentTermsController.text,
+                          'payment_status': paymentStatusController.text,
+                          'manager_id': managerIdController.text,
+                          'department_id': departmentIdController.text,
                         });
-                        Navigator.pop(context);
+                        if (mounted) {
+                          if (res['error'] == false) {
+                            _fetchClients();
+                            Navigator.pop(context);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'])));
+                          }
+                        }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.navy,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        "Add Client",
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.white,
-                        ),
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy),
+                      child: const Text("Save Client", style: TextStyle(color: Colors.white)),
                     ),
                   ),
                 ],
@@ -145,29 +199,21 @@ class _ClientDirectoryScreenState extends State<ClientDirectoryScreen> {
     );
   }
 
-  Widget _buildInputField(String hint, IconData icon, TextEditingController controller) {
+  Widget _buildInputField(String hint, IconData icon, TextEditingController controller, {bool isPassword = false}) {
     return TextField(
       controller: controller,
+      obscureText: isPassword,
       style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.navy),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: GoogleFonts.inter(color: AppColors.grey200, fontSize: 13, fontWeight: FontWeight.w500),
+        hintStyle: GoogleFonts.inter(color: AppColors.grey400, fontSize: 13),
         prefixIcon: Icon(icon, color: AppColors.grey400, size: 20),
         filled: true,
         fillColor: AppColors.offWhite,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   @override
@@ -179,14 +225,16 @@ class _ClientDirectoryScreenState extends State<ClientDirectoryScreen> {
         children: [
           _buildSearchBar(),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              itemCount: _clients.length,
-              itemBuilder: (context, index) {
-                final client = _clients[index];
-                return _buildClientCard(client);
-              },
-            ),
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _fetchClients,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    itemCount: _clients.length,
+                    itemBuilder: (context, index) => _buildClientCard(_clients[index]),
+                  ),
+                ),
           ),
         ],
       ),
@@ -194,10 +242,7 @@ class _ClientDirectoryScreenState extends State<ClientDirectoryScreen> {
         onPressed: _showAddClientDialog,
         backgroundColor: AppColors.navy,
         icon: const Icon(Icons.add_rounded, color: AppColors.white),
-        label: Text(
-          "Add Client",
-          style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: AppColors.white),
-        ),
+        label: const Text("Add Client", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -211,15 +256,7 @@ class _ClientDirectoryScreenState extends State<ClientDirectoryScreen> {
         icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.navy, size: 20),
         onPressed: () => Navigator.pop(context),
       ),
-      title: Text(
-        "Client Directory",
-        style: GoogleFonts.inter(
-          fontSize: 22,
-          fontWeight: FontWeight.w900,
-          color: AppColors.navy,
-          letterSpacing: -0.5,
-        ),
-      ),
+      title: Text("Client Directory", style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.navy)),
     );
   }
 
@@ -230,190 +267,58 @@ class _ClientDirectoryScreenState extends State<ClientDirectoryScreen> {
         controller: _searchController,
         decoration: InputDecoration(
           hintText: "Search clients...",
-          hintStyle: GoogleFonts.inter(color: AppColors.grey400, fontSize: 13),
-          prefixIcon: const Icon(Icons.search_rounded, color: AppColors.grey400, size: 20),
-          filled: true,
+          prefixIcon: const Icon(Icons.search_rounded),
           fillColor: AppColors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: AppColors.grey100),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: AppColors.grey100),
-          ),
+          filled: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
         ),
       ),
     );
   }
 
-  Widget _buildClientCard(Map<String, dynamic> client) {
-    final bool isActive = client['status'] == 'Active';
+  Widget _buildClientCard(dynamic client) {
+    final bool isActive = client['client_portal_access'] == true || client['client_portal_access'] == 1;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-        border: Border.all(color: AppColors.grey100.withValues(alpha: 0.5)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(24),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 65,
-                  height: 65,
-                  decoration: BoxDecoration(
-                    color: AppColors.navy.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Center(
-                    child: Text(
-                      client['name']![0],
-                      style: GoogleFonts.inter(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.navy,
-                      ),
-                    ),
-                  ),
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: AppColors.navy.withOpacity(0.1),
+                  child: Text(client['company_name']?[0] ?? 'C', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: AppColors.navy)),
                 ),
                 const SizedBox(width: 20),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              client['name']!,
-                              style: GoogleFonts.inter(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.navy,
-                                letterSpacing: -0.5,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          _buildStatusIndicator(isActive),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        client['company']!,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: AppColors.gold,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDetailRow(Icons.phone_rounded, client['phone']!),
+                      Text(client['company_name'] ?? 'Unknown', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                      Text(client['industry'] ?? 'General', style: const TextStyle(color: AppColors.gold, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      _buildDetailRow(Icons.email_rounded, client['email'] ?? 'No email'),
-                      const SizedBox(height: 8),
-                      _buildDetailRow(Icons.location_on_rounded, client['location'] ?? 'No location'),
+                      Text(client['email'] ?? 'No email', style: const TextStyle(fontSize: 12, color: AppColors.grey600)),
+                      Text(client['phone'] ?? 'No phone', style: const TextStyle(fontSize: 12, color: AppColors.grey600)),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.grey100),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildActionButton(Icons.person_pin_rounded, "Profile", AppColors.navy),
-                _buildActionButton(Icons.edit_note_rounded, "Edit", Colors.blue),
-                _buildActionButton(Icons.delete_outline_rounded, "Delete", AppColors.error),
+                Switch(
+                  value: isActive,
+                  onChanged: (val) => _toggleAccess(client, isActive),
+                  activeColor: AppColors.success,
+                ),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 15, color: AppColors.grey400),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: AppColors.grey600,
-              fontWeight: FontWeight.w600,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusIndicator(bool isActive) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: (isActive ? AppColors.success : AppColors.error).withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        isActive ? "Active" : "Disabled",
-        style: GoogleFonts.inter(
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          color: isActive ? AppColors.success : AppColors.error,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButton(IconData icon, String label, Color color) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {},
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: color),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

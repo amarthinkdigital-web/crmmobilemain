@@ -1081,63 +1081,7 @@ class ApiService {
     }
   }
 
-  static List<dynamic>? _cachedProjects;
 
-  static Future<Map<String, dynamic>> getProjects({List<dynamic>? fallbackData}) async {
-    if (_cachedProjects != null && _cachedProjects!.isNotEmpty) {
-      return {'error': false, 'data': _cachedProjects};
-    }
-
-    // Try multiple speculative endpoints
-    final endpoints = ['/projects', '/employee/projects', '/my-assignments', '/employee/assignments'];
-    for (var endpoint in endpoints) {
-      try {
-        final headers = await _headers();
-        final response = await http
-            .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
-            .timeout(const Duration(seconds: 5));
-        
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          final list = _extractList(data);
-          if (list.isNotEmpty) {
-            _cachedProjects = list;
-            return {'error': false, 'data': list};
-          }
-        }
-      } catch (_) {}
-    }
-
-    // If all fail, try to extract from provided fallback worksheets
-    if (fallbackData != null && fallbackData.isNotEmpty) {
-      final Map<dynamic, dynamic> extracted = {};
-      for (var item in fallbackData) {
-        final p = item['project'];
-        final pId = item['project_id'] ?? (p is Map ? p['id'] : null);
-        final pName = item['project_name'] ?? (p is Map ? p['name'] : (p is String ? p : null));
-        
-        if (pId != null && pName != null) {
-          extracted[pId] = pName;
-        }
-      }
-      if (extracted.isNotEmpty) {
-        final list = extracted.entries.map((e) => {'id': e.key, 'name': e.value}).toList();
-        _cachedProjects = list;
-        return {'error': false, 'data': list};
-      }
-    }
-
-    // Absolute fallback
-    return {
-      'error': false,
-      'data': [
-        {'id': 1, 'name': 'CRM Development'},
-        {'id': 2, 'name': 'Mobile App'},
-        {'id': 3, 'name': 'Marketing Campaign'},
-        {'id': 4, 'name': 'Infrastructure'},
-      ]
-    };
-  }
 
   // ─── Official Leaves (Company Holidays) ────────────────────────────────────
 
@@ -1320,28 +1264,6 @@ class ApiService {
     }
   }
 
-  static List _extractList(dynamic data) {
-    if (data is List) return data;
-    if (data is Map) {
-      if (data['data'] is List) return data['data'];
-      // Handle nested tasks structure: { "data": { "tasks": [...] } }
-      if (data['data'] is Map) {
-        final nestedData = data['data'] as Map;
-        if (nestedData['tasks'] is List) return nestedData['tasks'];
-        if (nestedData['data'] is List) return nestedData['data'];
-      }
-      // Fallback: search all values
-      for (var val in data.values) {
-        if (val is List) return val;
-        if (val is Map) {
-          for (var innerVal in val.values) {
-            if (innerVal is List) return innerVal;
-          }
-        }
-      }
-    }
-    return [];
-  }
 
   static Future<Map<String, dynamic>> deleteEmployeeDailyWorksheet(int id) async {
     try {
@@ -1920,5 +1842,227 @@ class ApiService {
   static Future<Map<String, dynamic>> downloadInvoicePdf(dynamic id) async {
     // This would typically return a URL or raw bytes
     return {'error': false, 'url': '$baseUrl/admin/invoices/$id/download'};
+  }
+
+  // ─── Lead Management ────────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getLeads() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/leads'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'error': false, 'data': _extractList(data)};
+      }
+      return {'error': true, 'message': data['message'] ?? 'Failed to load leads'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createLead(Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/leads'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to create lead'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateLeadStatus(int id, String status) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/leads/$id/update-status'),
+            headers: headers,
+            body: jsonEncode({'status': status}),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to update lead status'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> addFollowUp(int leadId, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(Uri.parse('$baseUrl/leads/$leadId/follow-ups'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to add follow-up'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateFollowUp(int followUpId, Map<String, dynamic> body) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .put(Uri.parse('$baseUrl/follow-ups/$followUpId'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to update follow-up'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteFollowUp(int followUpId) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .delete(Uri.parse('$baseUrl/follow-ups/$followUpId'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200 || response.statusCode == 204) return {'error': false};
+      return {'error': true, 'message': 'Failed to delete follow-up'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Client Profiles ───────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getClientProfiles() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/client-profiles'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'error': false, 'data': _extractList(data)};
+      }
+      return {'error': true, 'message': data['message'] ?? 'Failed to load client profiles'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createClientProfile(Map<String, String> fields, {List<File>? files}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/client-profiles'));
+      request.headers.addAll({
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+      
+      request.fields.addAll(fields);
+      
+      if (files != null) {
+        for (var file in files) {
+          request.files.add(await http.MultipartFile.fromPath('payment_documents[]', file.path));
+        }
+      }
+      
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamedResponse);
+      final data = jsonDecode(response.body);
+      
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to create client profile'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> togglePortalAccess(int id, bool access) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/client-profiles/$id/toggle-access'),
+            headers: headers,
+            body: jsonEncode({'client_portal_access': access}),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to toggle portal access'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Project Details ───────────────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getProjects({List<dynamic>? fallbackData}) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/project-details'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'error': false, 'data': _extractList(data)};
+      }
+      return {'error': true, 'message': data['message'] ?? 'Failed to load projects'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createProject(Map<String, String> fields, {List<File>? files, List<String>? employeeIds}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/project-details'));
+      request.headers.addAll({
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      });
+      
+      request.fields.addAll(fields);
+      
+      if (employeeIds != null) {
+        for (int i = 0; i < employeeIds.length; i++) {
+          request.fields['employee_ids[$i]'] = employeeIds[i];
+        }
+      }
+
+      if (files != null) {
+        for (var file in files) {
+          request.files.add(await http.MultipartFile.fromPath('documents[]', file.path));
+        }
+      }
+      
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamedResponse);
+      final data = jsonDecode(response.body);
+      
+      if (response.statusCode == 200 || response.statusCode == 201) return {'error': false, ...data};
+      return {'error': true, 'message': data['message'] ?? 'Failed to create project'};
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ─── Utilities ─────────────────────────────────────────────────────────────
+  static List _extractList(dynamic data) {
+    if (data is List) return data;
+    if (data is Map) {
+      if (data['data'] is List) return data['data'];
+      if (data['data'] is Map && data['data']['data'] is List) return data['data']['data'];
+      // Fallback: look for first list in entries
+      for (var entry in data.entries) {
+        if (entry.value is List) return entry.value;
+      }
+    }
+    return [];
   }
 }

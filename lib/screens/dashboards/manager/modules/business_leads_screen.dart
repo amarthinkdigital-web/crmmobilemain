@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../services/api_service.dart';
+import './client_directory_screen.dart';
 
 class BusinessLeadsScreen extends StatefulWidget {
   const BusinessLeadsScreen({super.key});
@@ -10,29 +13,74 @@ class BusinessLeadsScreen extends StatefulWidget {
 }
 
 class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
-  final List<Map<String, dynamic>> _leads = [
-    {
-      'company': 'Tech Solutions Inc.',
-      'person': 'John Doe',
-      'contact': '+1 234 567 890',
-      'source': 'Social Media',
-      'status': 'Pending'
-    },
-    {
-      'company': 'Global Trade Co.',
-      'person': 'Jane Smith',
-      'contact': '+1 987 654 321',
-      'source': 'Website',
-      'status': 'Done'
-    },
-    {
-      'company': 'Creative Agency',
-      'person': 'Mike Wilson',
-      'contact': '+1 456 789 012',
-      'source': 'Referral',
-      'status': 'Cancel'
-    },
-  ];
+  List<dynamic> _leads = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLeads();
+  }
+
+  Future<void> _fetchLeads() async {
+    setState(() => _isLoading = true);
+    final res = await ApiService.getLeads();
+    if (mounted) {
+      setState(() {
+        _leads = res['data'] ?? [];
+        _isLoading = false;
+      });
+      if (res['error'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'])),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateStatus(dynamic lead, String status) async {
+    final res = await ApiService.updateLeadStatus(lead['id'], status.toLowerCase());
+    if (mounted) {
+      if (res['error'] == false) {
+        _fetchLeads();
+        if (status.toLowerCase() == 'done') {
+          _showCreateClientPromotion(lead);
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'])),
+        );
+      }
+    }
+  }
+
+  void _showCreateClientPromotion(dynamic lead) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Lead Completed!"),
+        content: const Text("Would you like to create a client profile for this lead now?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Later"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ClientDirectoryScreen(),
+                ),
+              );
+            },
+            child: const Text("Create Profile"),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _showAddLeadDialog() {
     final companyController = TextEditingController();
@@ -100,17 +148,24 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _leads.insert(0, {
-                            'company': companyController.text,
-                            'person': personController.text,
-                            'contact': contactController.text,
-                            'source': sourceController.text,
-                            'status': 'Pending',
-                          });
+                      onPressed: () async {
+                        final res = await ApiService.createLead({
+                          'company_name': companyController.text,
+                          'contact_person': personController.text,
+                          'contact': contactController.text,
+                          'source': sourceController.text,
+                          'status': 'pending',
                         });
-                        Navigator.pop(context);
+                        if (mounted) {
+                          if (res['error'] == false) {
+                            _fetchLeads();
+                            Navigator.pop(context);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(res['message'])),
+                            );
+                          }
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navy,
@@ -132,6 +187,55 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showFollowUpDialog(dynamic lead) {
+    final dateController = TextEditingController(
+      text: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+    );
+    final descController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Add Follow-up for ${lead['company_name']}"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: dateController,
+              decoration: const InputDecoration(labelText: "Follow-up Date (YYYY-MM-DD)"),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descController,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: "Description"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              final res = await ApiService.addFollowUp(lead['id'], {
+                'follow_up_date': dateController.text,
+                'description': descController.text,
+              });
+              if (mounted) {
+                if (res['error'] == false) {
+                  _fetchLeads();
+                  Navigator.pop(context);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'])));
+                }
+              }
+            },
+            child: const Text("Add"),
+          ),
+        ],
       ),
     );
   }
@@ -159,20 +263,32 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          _buildSliverAppBar(),
-          SliverPadding(
-            padding: const EdgeInsets.all(20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildLeadCard(_leads[index]),
-                childCount: _leads.length,
+      body: RefreshIndicator(
+        onRefresh: _fetchLeads,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            _buildSliverAppBar(),
+            if (_isLoading)
+              const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_leads.isEmpty)
+              const SliverFillRemaining(
+                child: Center(child: Text("No leads found.")),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.all(20),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildLeadCard(_leads[index]),
+                    childCount: _leads.length,
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddLeadDialog,
@@ -209,8 +325,7 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
     );
   }
 
-
-  Widget _buildLeadCard(Map<String, dynamic> lead) {
+  Widget _buildLeadCard(dynamic lead) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -240,7 +355,7 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            lead['company'] ?? 'N/A',
+                            lead['company_name'] ?? 'N/A',
                             style: GoogleFonts.inter(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
@@ -254,7 +369,7 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
                               const Icon(Icons.person_rounded, size: 14, color: AppColors.grey400),
                               const SizedBox(width: 6),
                               Text(
-                                lead['person'] ?? 'N/A',
+                                lead['contact_person'] ?? 'N/A',
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -286,9 +401,8 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildActionButton(Icons.edit_note_rounded, "Edit", Colors.blue),
-                _buildActionButton(Icons.delete_outline_rounded, "Delete", AppColors.error),
-                _buildActionButton(Icons.history_rounded, "Follow-up", Colors.orange),
+                _buildActionButton(Icons.history_rounded, "Follow-up", Colors.orange, () => _showFollowUpDialog(lead)),
+                _buildActionButton(Icons.delete_outline_rounded, "Delete", AppColors.error, () {}),
               ],
             ),
           ),
@@ -326,34 +440,38 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
     );
   }
 
-  Widget _buildStatusDropdown(Map<String, dynamic> lead) {
-    final statuses = ['Pending', 'Cancel', 'Done'];
+  Widget _buildStatusDropdown(dynamic lead) {
+    final status = lead['status']?.toString().toLowerCase() ?? 'pending';
+    final items = [
+      {'val': 'pending', 'label': 'Pending'},
+      {'val': 'cancel', 'label': 'Cancel'},
+      {'val': 'done', 'label': 'Done'},
+    ];
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: _getStatusColor(lead['status']).withOpacity(0.1),
+        color: _getStatusColor(status).withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: lead['status'],
-          icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: _getStatusColor(lead['status'])),
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: _getStatusColor(lead['status']),
-          ),
-          onChanged: (String? newValue) {
-            if (newValue != null) {
-              setState(() {
-                lead['status'] = newValue;
-              });
-            }
+          value: items.any((i) => i['val'] == status) ? status : 'pending',
+          icon: Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: _getStatusColor(status)),
+          onChanged: (val) {
+            if (val != null) _updateStatus(lead, val);
           },
-          items: statuses.map<DropdownMenuItem<String>>((String value) {
+          items: items.map((i) {
             return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
+              value: i['val'],
+              child: Text(
+                i['label']!,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: _getStatusColor(status),
+                ),
+              ),
             );
           }).toList(),
         ),
@@ -361,11 +479,11 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, Color color) {
+  Widget _buildActionButton(IconData icon, String label, Color color, VoidCallback onTap) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -389,10 +507,10 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Done': return AppColors.success;
-      case 'Cancel': return AppColors.error;
-      case 'Pending': return AppColors.warning;
+    switch (status.toLowerCase()) {
+      case 'done': return AppColors.success;
+      case 'cancel': return AppColors.error;
+      case 'pending': return AppColors.warning;
       default: return AppColors.grey400;
     }
   }

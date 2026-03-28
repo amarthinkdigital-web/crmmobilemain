@@ -14,6 +14,7 @@ import 'dashboards/employee/apply_leave_screen.dart';
 import 'dashboards/employee/events_screen.dart';
 import 'dashboards/employee/company_holidays_screen.dart';
 import 'dashboards/employee/employee_dashboard.dart';
+import 'dashboards/employee/my_salary_screen.dart';
 import 'dashboards/admin/admin_dashboard.dart';
 import 'dashboards/admin/recruitment_screen.dart';
 import 'dashboards/admin/employee_leaves_screen.dart';
@@ -38,6 +39,7 @@ import 'dashboards/manager/manager_leave_request_screen.dart';
 import 'dashboards/manager/manager_events_screen.dart';
 import 'dashboards/manager/manager_holidays_screen.dart';
 import 'dashboards/manager/manager_team_attendance_view.dart';
+import 'dashboards/manager/manager_salary_screen.dart';
 import 'dashboards/admin/departments_screen.dart';
 import 'dashboards/admin/managerprofile_screen.dart';
 import 'dashboards/admin/employeeprofile_screen.dart';
@@ -87,11 +89,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     _syncStatusWithBackend();
   }
 
-
   Future<void> _syncStatusWithBackend() async {
     // Current dashboards handle their own status syncing.
   }
-
 
   void _initAnimations() {
     _pulseController = AnimationController(
@@ -99,7 +99,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       duration: const Duration(milliseconds: 1500),
     );
   }
-
 
   void _initDashboards() {
     final String role = widget.userRole.toLowerCase();
@@ -138,6 +137,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           'icon': Icons.time_to_leave_rounded,
           'isSub': true,
         },
+        {'name': 'My Salary', 'icon': Icons.payments_rounded, 'isSub': true},
         {
           'name': 'Team Management',
           'icon': Icons.groups_rounded,
@@ -278,6 +278,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         {'name': 'My Worksheet List', 'icon': Icons.description_rounded},
         {'name': 'Task Management', 'icon': Icons.assignment_rounded},
         {'name': 'Apply for Leave', 'icon': Icons.time_to_leave_rounded},
+        {'name': 'My Salary', 'icon': Icons.payments_rounded},
         {'name': 'Events', 'icon': Icons.event_rounded},
         {'name': 'Company Holidays', 'icon': Icons.beach_access_rounded},
       ];
@@ -296,8 +297,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (mounted) setState(() {});
     });
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -600,6 +599,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             ? const ManagerLeaveRequestScreen()
             : const ApplyLeaveScreen();
 
+      case 'My Salary':
+        return role == 'manager'
+            ? const ManagerSalaryScreen()
+            : const MySalaryScreen();
+
       case 'Events':
         return role == 'manager'
             ? const ManagerEventsScreen()
@@ -695,9 +699,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         return _buildMainDashboard();
     }
   }
-
-
-
 
   // ─── Top Bar ───
   Widget _buildTopBar() {
