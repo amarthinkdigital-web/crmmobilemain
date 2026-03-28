@@ -9,17 +9,19 @@ import 'modules/business_leads_screen.dart';
 import 'modules/client_directory_screen.dart';
 import 'modules/project_details_screen.dart';
 import 'modules/support_tickets_screen.dart';
-
+import 'manager_salary_screen.dart';
 
 class ManagerIndividualDashboard extends StatefulWidget {
   final String userName;
   const ManagerIndividualDashboard({super.key, required this.userName});
 
   @override
-  State<ManagerIndividualDashboard> createState() => _ManagerIndividualDashboardState();
+  State<ManagerIndividualDashboard> createState() =>
+      _ManagerIndividualDashboardState();
 }
 
-class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard> {
+class _ManagerIndividualDashboardState
+    extends State<ManagerIndividualDashboard> {
   bool _isLoading = true;
   String _userRole = '';
 
@@ -29,7 +31,15 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
   double _attendanceRate = 0.0;
   double _totalHoursWorked = 0.0;
 
-  final List<double> _taskEfficiencyData = [70.0, 50.0, 80.0, 60.0, 90.0, 75.0, 95.0];
+  final List<double> _taskEfficiencyData = [
+    70.0,
+    50.0,
+    80.0,
+    60.0,
+    90.0,
+    75.0,
+    95.0,
+  ];
   final List<double> _hoursTrendData = [8.0, 8.5, 7.0, 9.5, 9.0, 0.0, 0.0];
 
   @override
@@ -62,23 +72,33 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
           if (taskRes['error'] == false && taskRes['data'] is List) {
             final List tasks = taskRes['data'];
             _totalTasks = tasks.length;
-            _completedTasks = tasks.where((t) => (t['status'] ?? '').toString().toLowerCase() == 'completed').length;
+            _completedTasks = tasks
+                .where(
+                  (t) =>
+                      (t['status'] ?? '').toString().toLowerCase() ==
+                      'completed',
+                )
+                .length;
           }
 
           // Worksheets processing for hours
           if (worksheetRes['error'] == false && worksheetRes['data'] is List) {
             final List sheets = worksheetRes['data'];
             _totalHoursWorked = sheets.fold(0.0, (sum, item) {
-              final duration = double.tryParse(item['duration']?.toString() ?? '0') ?? 0.0;
+              final duration =
+                  double.tryParse(item['duration']?.toString() ?? '0') ?? 0.0;
               return sum + duration;
             });
           }
 
           // Attendance calculation
-          if (attendanceRes['error'] == false && attendanceRes['data'] is List) {
+          if (attendanceRes['error'] == false &&
+              attendanceRes['data'] is List) {
             final List attendance = attendanceRes['data'];
             if (attendance.isNotEmpty) {
-              final onTimeCount = attendance.where((a) => (a['is_late'] == 0 || a['is_late'] == false)).length;
+              final onTimeCount = attendance
+                  .where((a) => (a['is_late'] == 0 || a['is_late'] == false))
+                  .length;
               _attendanceRate = (onTimeCount / attendance.length) * 100;
             } else {
               _attendanceRate = 100.0;
@@ -107,7 +127,9 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
       onRefresh: _loadInitialData,
       color: AppColors.gold,
       child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,20 +140,28 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
             const SizedBox(height: 32),
             _buildPerformanceStats(),
             const SizedBox(height: 32),
-            _buildSectionHeader("Operational Insights", "Key Performance Trends"),
+            _buildSectionHeader(
+              "Operational Insights",
+              "Key Performance Trends",
+            ),
             const SizedBox(height: 16),
             _buildEfficiencyChart(),
             const SizedBox(height: 32),
-            _buildSectionHeader("Business Management", "Strategic operations & growth"),
+            _buildSectionHeader(
+              "Business Management",
+              "Strategic operations & growth",
+            ),
             const SizedBox(height: 16),
             _buildBusinessModules(),
             const SizedBox(height: 24),
             _buildHoursTrend(),
             const SizedBox(height: 32),
-            _buildSectionHeader("Recent Activities", "Management log highlights"),
+            _buildSectionHeader(
+              "Recent Activities",
+              "Management log highlights",
+            ),
             const SizedBox(height: 16),
             _buildRecentActivity(),
-
           ],
         ),
       ),
@@ -227,7 +257,10 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(30),
@@ -235,7 +268,11 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.shield_rounded, color: AppColors.gold, size: 14),
+                      const Icon(
+                        Icons.shield_rounded,
+                        color: AppColors.gold,
+                        size: 14,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         _userRole.toUpperCase(),
@@ -317,7 +354,13 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
     );
   }
 
-  Widget _buildStatCard(String title, String value, String sub, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    String sub,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -411,7 +454,11 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
     );
   }
 
-  Widget _buildChartCard({required String title, required String subtitle, required Widget content}) {
+  Widget _buildChartCard({
+    required String title,
+    required String subtitle,
+    required Widget content,
+  }) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -447,13 +494,19 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
                     Text(
                       subtitle,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400),
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.grey400,
+                      ),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.offWhite,
                   borderRadius: BorderRadius.circular(8),
@@ -549,6 +602,13 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
         'color': AppColors.warning,
         'screen': const SupportTicketsScreen(),
       },
+      {
+        'title': 'My Salary',
+        'subtitle': 'Earnings & payouts',
+        'icon': Icons.payments_rounded,
+        'color': AppColors.navy,
+        'screen': const ManagerSalaryScreen(),
+      },
     ];
 
     return GridView.builder(
@@ -628,8 +688,13 @@ class _ManagerIndividualDashboardState extends State<ManagerIndividualDashboard>
     );
   }
 
-  Widget _buildActivityItem(String title, String type, String time, IconData icon, Color color) {
-
+  Widget _buildActivityItem(
+    String title,
+    String type,
+    String time,
+    IconData icon,
+    Color color,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -687,7 +752,11 @@ class BarChartPainter extends CustomPainter {
   final List<String> labels;
   final Color barColor;
 
-  BarChartPainter({required this.data, required this.labels, required this.barColor});
+  BarChartPainter({
+    required this.data,
+    required this.labels,
+    required this.barColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -702,25 +771,44 @@ class BarChartPainter extends CustomPainter {
     final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
 
     for (int i = 0; i < data.length; i++) {
-        final double x = padding + (i * spacing) + (spacing / 2) - (barWidth / 2);
-        
-        canvas.drawRRect(
-          RRect.fromLTRBR(x, padding, x + barWidth, padding + graphHeight, const Radius.circular(8)),
-          backgroundPaint,
-        );
+      final double x = padding + (i * spacing) + (spacing / 2) - (barWidth / 2);
 
-        final double barHeight = (data[i] / 100) * graphHeight;
-        canvas.drawRRect(
-          RRect.fromLTRBR(x, padding + graphHeight - barHeight, x + barWidth, padding + graphHeight, const Radius.circular(8)),
-          paint,
-        );
+      canvas.drawRRect(
+        RRect.fromLTRBR(
+          x,
+          padding,
+          x + barWidth,
+          padding + graphHeight,
+          const Radius.circular(8),
+        ),
+        backgroundPaint,
+      );
 
-        textPainter.text = TextSpan(
-          text: labels[i],
-          style: GoogleFonts.inter(fontSize: 10, color: AppColors.grey400, fontWeight: FontWeight.bold),
-        );
-        textPainter.layout();
-        textPainter.paint(canvas, Offset(x + (barWidth / 2) - (textPainter.width / 2), size.height - 15));
+      final double barHeight = (data[i] / 100) * graphHeight;
+      canvas.drawRRect(
+        RRect.fromLTRBR(
+          x,
+          padding + graphHeight - barHeight,
+          x + barWidth,
+          padding + graphHeight,
+          const Radius.circular(8),
+        ),
+        paint,
+      );
+
+      textPainter.text = TextSpan(
+        text: labels[i],
+        style: GoogleFonts.inter(
+          fontSize: 10,
+          color: AppColors.grey400,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(x + (barWidth / 2) - (textPainter.width / 2), size.height - 15),
+      );
     }
   }
 
@@ -734,7 +822,11 @@ class LineTrendPainter extends CustomPainter {
   final List<String> labels;
   final Color lineColor;
 
-  LineTrendPainter({required this.data, required this.labels, required this.lineColor});
+  LineTrendPainter({
+    required this.data,
+    required this.labels,
+    required this.lineColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -754,7 +846,10 @@ class LineTrendPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [lineColor.withValues(alpha: 0.3), lineColor.withValues(alpha: 0.0)],
+        colors: [
+          lineColor.withValues(alpha: 0.3),
+          lineColor.withValues(alpha: 0.0),
+        ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     final path = Path();
@@ -762,7 +857,8 @@ class LineTrendPainter extends CustomPainter {
 
     for (int i = 0; i < data.length; i++) {
       final double x = padding + (i * spacing);
-      final double y = padding + graphHeight - ((data[i] / maxVal) * graphHeight);
+      final double y =
+          padding + graphHeight - ((data[i] / maxVal) * graphHeight);
 
       if (i == 0) {
         path.moveTo(x, y);
@@ -781,11 +877,18 @@ class LineTrendPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: TextSpan(
           text: labels[i],
-          style: GoogleFonts.inter(fontSize: 10, color: AppColors.grey400, fontWeight: FontWeight.bold),
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            color: AppColors.grey400,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         textDirection: ui.TextDirection.ltr,
       )..layout();
-      textPainter.paint(canvas, Offset(x - (textPainter.width / 2), size.height - 15));
+      textPainter.paint(
+        canvas,
+        Offset(x - (textPainter.width / 2), size.height - 15),
+      );
     }
 
     canvas.drawPath(fillPath, fillPaint);
@@ -794,10 +897,11 @@ class LineTrendPainter extends CustomPainter {
     final dotPaint = Paint()..color = lineColor;
     final innerDotPaint = Paint()..color = AppColors.white;
     for (int i = 0; i < data.length; i++) {
-        final double x = padding + (i * spacing);
-        final double y = padding + graphHeight - ((data[i] / maxVal) * graphHeight);
-        canvas.drawCircle(Offset(x, y), 5, dotPaint);
-        canvas.drawCircle(Offset(x, y), 2.5, innerDotPaint);
+      final double x = padding + (i * spacing);
+      final double y =
+          padding + graphHeight - ((data[i] / maxVal) * graphHeight);
+      canvas.drawCircle(Offset(x, y), 5, dotPaint);
+      canvas.drawCircle(Offset(x, y), 2.5, innerDotPaint);
     }
   }
 
