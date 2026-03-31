@@ -23,7 +23,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
   double _systemUptime = 99.98;
   double _monthlyRevenue = 14250.0;
 
-  final List<double> _revenueTrendData = [80.0, 65.0, 95.0, 85.0, 100.0, 70.0, 90.0];
+  final List<double> _revenueTrendData = [
+    80.0,
+    65.0,
+    95.0,
+    85.0,
+    100.0,
+    70.0,
+    90.0,
+  ];
   final List<double> _userGrowthData = [8.2, 7.8, 9.1, 8.5, 9.4, 0.0, 0.0];
 
   @override
@@ -60,11 +68,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
             } else if (data is Map && data['data'] is List) {
               items = data['data'];
             }
-            
+
             _monthlyRevenue = items.fold(0.0, (sum, item) {
-                final amount = double.tryParse(item['total_amount']?.toString() ?? '0') ?? 
-                             double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-                return sum + amount;
+              final amount =
+                  double.tryParse(item['total_amount']?.toString() ?? '0') ??
+                  double.tryParse(item['amount']?.toString() ?? '0') ??
+                  0.0;
+              return sum + amount;
             });
           }
 
@@ -90,7 +100,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       onRefresh: _loadInitialData,
       color: AppColors.gold,
       child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,13 +113,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
             const SizedBox(height: 32),
             _buildSystemStats(),
             const SizedBox(height: 32),
-            _buildSectionHeader("Company Analytics", "Enterprise Performance & Trends"),
+            _buildSectionHeader(
+              "Company Analytics",
+              "Enterprise Performance & Trends",
+            ),
             const SizedBox(height: 16),
             _buildRevenueChart(),
             const SizedBox(height: 24),
             _buildUserGrowthTrend(),
             const SizedBox(height: 32),
-            _buildSectionHeader("System Monitoring", "Recent activity & health status"),
+            _buildSectionHeader(
+              "System Monitoring",
+              "Recent activity & health status",
+            ),
             const SizedBox(height: 16),
             _buildSystemLogs(),
           ],
@@ -205,7 +223,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(30),
@@ -213,7 +234,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.admin_panel_settings_rounded, color: AppColors.gold, size: 14),
+                      const Icon(
+                        Icons.admin_panel_settings_rounded,
+                        color: AppColors.gold,
+                        size: 14,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         _userRole.toUpperCase(),
@@ -295,7 +320,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, String sub, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    String sub,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -330,6 +361,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               color: AppColors.navy,
               letterSpacing: -1,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
           Text(
@@ -339,6 +372,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               fontWeight: FontWeight.w700,
               color: AppColors.grey600,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           Text(
             sub,
@@ -347,6 +382,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               color: AppColors.grey400,
               fontWeight: FontWeight.w500,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -389,7 +426,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildChartCard({required String title, required String subtitle, required Widget content}) {
+  Widget _buildChartCard({
+    required String title,
+    required String subtitle,
+    required Widget content,
+  }) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -410,25 +451,38 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.navy,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400),
-                  ),
-                ],
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.grey400,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.offWhite,
                   borderRadius: BorderRadius.circular(8),
@@ -494,7 +548,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildActivityItem(String title, String type, String time, IconData icon, Color color) {
+  Widget _buildActivityItem(
+    String title,
+    String type,
+    String time,
+    IconData icon,
+    Color color,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -552,7 +612,11 @@ class BarChartPainter extends CustomPainter {
   final List<String> labels;
   final Color barColor;
 
-  BarChartPainter({required this.data, required this.labels, required this.barColor});
+  BarChartPainter({
+    required this.data,
+    required this.labels,
+    required this.barColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -567,25 +631,44 @@ class BarChartPainter extends CustomPainter {
     final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
 
     for (int i = 0; i < data.length; i++) {
-        final double x = padding + (i * spacing) + (spacing / 2) - (barWidth / 2);
-        
-        canvas.drawRRect(
-          RRect.fromLTRBR(x, padding, x + barWidth, padding + graphHeight, const Radius.circular(8)),
-          backgroundPaint,
-        );
+      final double x = padding + (i * spacing) + (spacing / 2) - (barWidth / 2);
 
-        final double barHeight = (data[i] / 100) * graphHeight;
-        canvas.drawRRect(
-          RRect.fromLTRBR(x, padding + graphHeight - barHeight, x + barWidth, padding + graphHeight, const Radius.circular(8)),
-          paint,
-        );
+      canvas.drawRRect(
+        RRect.fromLTRBR(
+          x,
+          padding,
+          x + barWidth,
+          padding + graphHeight,
+          const Radius.circular(8),
+        ),
+        backgroundPaint,
+      );
 
-        textPainter.text = TextSpan(
-          text: labels[i],
-          style: GoogleFonts.inter(fontSize: 10, color: AppColors.grey400, fontWeight: FontWeight.bold),
-        );
-        textPainter.layout();
-        textPainter.paint(canvas, Offset(x + (barWidth / 2) - (textPainter.width / 2), size.height - 15));
+      final double barHeight = (data[i] / 100) * graphHeight;
+      canvas.drawRRect(
+        RRect.fromLTRBR(
+          x,
+          padding + graphHeight - barHeight,
+          x + barWidth,
+          padding + graphHeight,
+          const Radius.circular(8),
+        ),
+        paint,
+      );
+
+      textPainter.text = TextSpan(
+        text: labels[i],
+        style: GoogleFonts.inter(
+          fontSize: 10,
+          color: AppColors.grey400,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(x + (barWidth / 2) - (textPainter.width / 2), size.height - 15),
+      );
     }
   }
 
@@ -599,7 +682,11 @@ class LineTrendPainter extends CustomPainter {
   final List<String> labels;
   final Color lineColor;
 
-  LineTrendPainter({required this.data, required this.labels, required this.lineColor});
+  LineTrendPainter({
+    required this.data,
+    required this.labels,
+    required this.lineColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -619,7 +706,10 @@ class LineTrendPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [lineColor.withValues(alpha: 0.3), lineColor.withValues(alpha: 0.0)],
+        colors: [
+          lineColor.withValues(alpha: 0.3),
+          lineColor.withValues(alpha: 0.0),
+        ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     final path = Path();
@@ -627,7 +717,8 @@ class LineTrendPainter extends CustomPainter {
 
     for (int i = 0; i < data.length; i++) {
       final double x = padding + (i * spacing);
-      final double y = padding + graphHeight - ((data[i] / maxVal) * graphHeight);
+      final double y =
+          padding + graphHeight - ((data[i] / maxVal) * graphHeight);
 
       if (i == 0) {
         path.moveTo(x, y);
@@ -646,11 +737,18 @@ class LineTrendPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: TextSpan(
           text: labels[i],
-          style: GoogleFonts.inter(fontSize: 10, color: AppColors.grey400, fontWeight: FontWeight.bold),
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            color: AppColors.grey400,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         textDirection: ui.TextDirection.ltr,
       )..layout();
-      textPainter.paint(canvas, Offset(x - (textPainter.width / 2), size.height - 15));
+      textPainter.paint(
+        canvas,
+        Offset(x - (textPainter.width / 2), size.height - 15),
+      );
     }
 
     canvas.drawPath(fillPath, fillPaint);
@@ -659,10 +757,11 @@ class LineTrendPainter extends CustomPainter {
     final dotPaint = Paint()..color = lineColor;
     final innerDotPaint = Paint()..color = AppColors.white;
     for (int i = 0; i < data.length; i++) {
-        final double x = padding + (i * spacing);
-        final double y = padding + graphHeight - ((data[i] / maxVal) * graphHeight);
-        canvas.drawCircle(Offset(x, y), 5, dotPaint);
-        canvas.drawCircle(Offset(x, y), 2.5, innerDotPaint);
+      final double x = padding + (i * spacing);
+      final double y =
+          padding + graphHeight - ((data[i] / maxVal) * graphHeight);
+      canvas.drawCircle(Offset(x, y), 5, dotPaint);
+      canvas.drawCircle(Offset(x, y), 2.5, innerDotPaint);
     }
   }
 

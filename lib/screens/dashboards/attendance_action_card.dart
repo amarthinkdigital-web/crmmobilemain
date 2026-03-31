@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:network_info_plus/network_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -12,6 +14,8 @@ class AttendanceActionCard extends StatefulWidget {
 }
 
 class _AttendanceActionCardState extends State<AttendanceActionCard> {
+  static const String officeWiFiName = "Airtel_Think Digital";
+
   bool _isLoading = true;
   Map<String, dynamic>? _todayRecord;
   String _status = "Loading...";
@@ -50,10 +54,13 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
     }
 
     // Check for active break
-    bool onBreak = _todayRecord!['on_break'] == true || 
-                   _todayRecord!['on_break'] == 1 ||
-                   (_todayRecord!['break_in'] != null && _todayRecord!['break_out'] == null) ||
-                   (_todayRecord!['break_in_1'] != null && _todayRecord!['break_out_1'] == null);
+    bool onBreak =
+        _todayRecord!['on_break'] == true ||
+        _todayRecord!['on_break'] == 1 ||
+        (_todayRecord!['break_in'] != null &&
+            _todayRecord!['break_out'] == null) ||
+        (_todayRecord!['break_in_1'] != null &&
+            _todayRecord!['break_out_1'] == null);
 
     if (onBreak) {
       _status = "On Break";
@@ -62,8 +69,20 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
     }
   }
 
-  Future<void> _handleAction(Future<Map<String, dynamic>> Function() action) async {
+  Future<void> _handleAction(
+    Future<Map<String, dynamic>> Function() action, {
+    bool isClockIn = false,
+  }) async {
     setState(() => _isLoading = true);
+
+    if (isClockIn) {
+      bool allowed = await _checkWiFiConnection();
+      if (!allowed) {
+        setState(() => _isLoading = false);
+        return;
+      }
+    }
+
     final res = await action();
     if (mounted) {
       if (res['error'] == false || res['success'] == true) {
@@ -74,9 +93,66 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
       } else {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message'] ?? 'Action failed'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text(res['message'] ?? 'Action failed'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
+    }
+  }
+
+  Future<bool> _checkWiFiConnection() async {
+    try {
+      // 1. Request location permission (required on Android to get SSID)
+      var status = await Permission.locationWhenInUse.status;
+      if (status.isDenied) {
+        status = await Permission.locationWhenInUse.request();
+      }
+
+      if (status.isPermanentlyDenied) {
+        _showErrorSnackBar(
+          "Location permission is needed to verify WiFi. Please enable it in settings.",
+        );
+        return false;
+      }
+
+      // 2. Get WiFi name
+      final info = NetworkInfo();
+      String? wifiName = await info.getWifiName();
+
+      // Clean the name (Android often wraps in quotes)
+      String cleanWifi = wifiName?.replaceAll('"', '') ?? '';
+
+      print("DEBUG: Retreived SSID: $cleanWifi"); // Helpful for debugging
+
+      if (cleanWifi.toLowerCase() == officeWiFiName.toLowerCase() ||
+          cleanWifi == officeWiFiName ||
+          cleanWifi == "Office_WiFi" ||
+          cleanWifi.contains("Think Digital")) {
+        return true;
+      }
+
+      String errorTxt =
+          "Clock In failed! Please connect to '$officeWiFiName' WiFi.";
+      if (cleanWifi.isEmpty || cleanWifi == "<unknown ssid>") {
+        errorTxt =
+            "Could not detect WiFi name. Please make sure WiFi and Location (GPS) are both ON.";
+      }
+
+      _showErrorSnackBar(errorTxt);
+      return false;
+    } catch (e) {
+      _showErrorSnackBar("Error verification WiFi: ${e.toString()}");
+      return false;
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: AppColors.error),
+      );
     }
   }
 
@@ -90,19 +166,26 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: AppColors.grey100),
         ),
-        child: const Center(child: CircularProgressIndicator(color: AppColors.navy)),
+        child: const Center(
+          child: CircularProgressIndicator(color: AppColors.navy),
+        ),
       );
     }
 
-    final bool isClockedIn = _todayRecord != null && _todayRecord!['clock_out'] == null;
-    final bool isClockedOut = _todayRecord != null && _todayRecord!['clock_out'] != null;
-    
+    final bool isClockedIn =
+        _todayRecord != null && _todayRecord!['clock_out'] == null;
+    final bool isClockedOut =
+        _todayRecord != null && _todayRecord!['clock_out'] != null;
+
     bool isOnBreak = false;
     if (isClockedIn) {
-      isOnBreak = _todayRecord!['on_break'] == true || 
-                  _todayRecord!['on_break'] == 1 ||
-                  (_todayRecord!['break_in'] != null && _todayRecord!['break_out'] == null) ||
-                  (_todayRecord!['break_in_1'] != null && _todayRecord!['break_out_1'] == null);
+      isOnBreak =
+          _todayRecord!['on_break'] == true ||
+          _todayRecord!['on_break'] == 1 ||
+          (_todayRecord!['break_in'] != null &&
+              _todayRecord!['break_out'] == null) ||
+          (_todayRecord!['break_in_1'] != null &&
+              _todayRecord!['break_out_1'] == null);
     }
 
     return Container(
@@ -130,7 +213,11 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
                     color: _getStatusColor().withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(_getStatusIcon(), color: _getStatusColor(), size: 24),
+                  child: Icon(
+                    _getStatusIcon(),
+                    color: _getStatusColor(),
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -145,16 +232,28 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
                           color: AppColors.navy,
                         ),
                       ),
-                      if (_todayRecord != null && _todayRecord!['clock_in'] != null)
+                      if (_todayRecord != null &&
+                          _todayRecord!['clock_in'] != null)
                         Text(
                           "Clocked in at ${_formatTime(_todayRecord!['clock_in'])}",
-                          style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400, fontWeight: FontWeight.w500),
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.grey400,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                     ],
                   ),
                 ),
                 if (_isLoading)
-                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.navy)),
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.navy,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -168,7 +267,7 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
                     "Clock In",
                     Icons.login_rounded,
                     AppColors.success,
-                    () => _handleAction(ApiService.clockIn),
+                    () => _handleAction(ApiService.clockIn, isClockIn: true),
                   ),
                 if (isClockedIn && !isOnBreak)
                   _buildActionButton(
@@ -180,7 +279,11 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
                 if (isClockedOut)
                   Text(
                     "You have completed your shift for today.",
-                    style: GoogleFonts.inter(color: AppColors.grey400, fontSize: 13, fontStyle: FontStyle.italic),
+                    style: GoogleFonts.inter(
+                      color: AppColors.grey400,
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 if (isClockedIn) ...[
                   const SizedBox(height: 12),
@@ -189,9 +292,15 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
                       Expanded(
                         child: _buildSecondaryButton(
                           isOnBreak ? "End Break" : "Start Break",
-                          isOnBreak ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                          isOnBreak
+                              ? Icons.play_arrow_rounded
+                              : Icons.pause_rounded,
                           isOnBreak ? AppColors.info : AppColors.gold,
-                          () => _handleAction(isOnBreak ? ApiService.breakOut : ApiService.breakIn),
+                          () => _handleAction(
+                            isOnBreak
+                                ? ApiService.breakOut
+                                : ApiService.breakIn,
+                          ),
                         ),
                       ),
                     ],
@@ -205,29 +314,47 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
     );
   }
 
-  Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildActionButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: _isLoading ? null : onTap,
         icon: Icon(icon, size: 20),
-        label: Text(label, style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15)),
+        label: Text(
+          label,
+          style: GoogleFonts.inter(fontWeight: FontWeight.w800, fontSize: 15),
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: AppColors.white,
           padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           elevation: 0,
         ),
       ),
     );
   }
 
-  Widget _buildSecondaryButton(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildSecondaryButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return OutlinedButton.icon(
       onPressed: _isLoading ? null : onTap,
       icon: Icon(icon, size: 18),
-      label: Text(label, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14)),
+      label: Text(
+        label,
+        style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
       style: OutlinedButton.styleFrom(
         foregroundColor: color,
         side: BorderSide(color: color, width: 2),
@@ -239,23 +366,34 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
 
   Color _getStatusColor() {
     switch (_status) {
-      case "Clocked In": return AppColors.success;
-      case "On Break": return AppColors.gold;
-      case "Shift Ended": return AppColors.info;
-      case "Not Clocked In": return AppColors.grey400;
-      default: return AppColors.navy;
+      case "Clocked In":
+        return AppColors.success;
+      case "On Break":
+        return AppColors.gold;
+      case "Shift Ended":
+        return AppColors.info;
+      case "Not Clocked In":
+        return AppColors.grey400;
+      default:
+        return AppColors.navy;
     }
   }
 
   IconData _getStatusIcon() {
     switch (_status) {
-      case "Clocked In": return Icons.timer_rounded;
-      case "On Break": return Icons.coffee_rounded;
-      case "Shift Ended": return Icons.check_circle_rounded;
-      case "Not Clocked In": return Icons.more_time_rounded;
-      default: return Icons.info_outline;
+      case "Clocked In":
+        return Icons.timer_rounded;
+      case "On Break":
+        return Icons.coffee_rounded;
+      case "Shift Ended":
+        return Icons.check_circle_rounded;
+      case "Not Clocked In":
+        return Icons.more_time_rounded;
+      default:
+        return Icons.info_outline;
     }
   }
+
   String _formatTime(String timeStr) {
     try {
       // Handle cases like "09:00:00" or ISO "2024-03-25T09:00:00.000000Z"

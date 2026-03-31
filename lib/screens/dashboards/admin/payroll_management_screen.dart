@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../theme/app_theme.dart';
+import '../../../../models/salary_model.dart';
+import '../../../../services/api_service.dart';
+import '../../../../theme/app_theme.dart';
 
 class PayrollManagementScreen extends StatefulWidget {
   const PayrollManagementScreen({super.key});
@@ -11,66 +13,223 @@ class PayrollManagementScreen extends StatefulWidget {
 }
 
 class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
-  String selectedMonth = "March";
-  String selectedYear = "2026";
+  String selectedMonth = DateTime.now().month.toString();
+  String selectedYear = DateTime.now().year.toString();
 
-  final List<String> months = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
+  final List<Map<String, String>> months = [
+    {"id": "1", "name": "January"},
+    {"id": "2", "name": "February"},
+    {"id": "3", "name": "March"},
+    {"id": "4", "name": "April"},
+    {"id": "5", "name": "May"},
+    {"id": "6", "name": "June"},
+    {"id": "7", "name": "July"},
+    {"id": "8", "name": "August"},
+    {"id": "9", "name": "September"},
+    {"id": "10", "name": "October"},
+    {"id": "11", "name": "November"},
+    {"id": "12", "name": "December"},
   ];
   final List<String> years = ["2023", "2024", "2025", "2026"];
 
-  final List<Map<String, dynamic>> payrollData = [
-    {
-      "employee": "John Doe",
-      "baseRate": "\$2,500",
-      "offDays": "4",
-      "pl": "1",
-      "absent": "0",
-      "totalPaid": "26",
-      "netSalary": "\$2,450",
-      "status": "Paid",
-    },
-    {
-      "employee": "Jane Smith",
-      "baseRate": "\$3,000",
-      "offDays": "4",
-      "pl": "0",
-      "absent": "2",
-      "totalPaid": "24",
-      "netSalary": "\$2,750",
-      "status": "Unpaid",
-    },
-  ];
+  bool _isLoading = true;
+  List<Salary> _salaries = [];
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSalaries();
+  }
+
+  Future<void> _fetchSalaries() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final response = await ApiService.getAdminSalaries(
+      month: int.tryParse(selectedMonth),
+      year: int.tryParse(selectedYear),
+    );
+
+    if (response['error'] == false) {
+      final List data = (response['data'] is Map)
+          ? (response['data']['salaries'] ?? [])
+          : (response['data'] ?? []);
+      setState(() {
+        _salaries = data.map((json) => Salary.fromJson(json)).toList();
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _errorMessage = response['message'];
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _generateSalaries() async {
+    _showLoadingDialog("Generating salaries...");
+    final response = await ApiService.generateAdminSalaries(
+      int.parse(selectedMonth),
+      int.parse(selectedYear),
+    );
+    Navigator.pop(context);
+
+    if (response['error'] == false) {
+      _showSuccess(response['message'] ?? "Salaries generated successfully");
+      _fetchSalaries();
+    } else {
+      _showError(response['message'] ?? "Failed to generate salaries");
+    }
+  }
+
+  Future<void> _syncRecord(Salary salary) async {
+    _showLoadingDialog("Syncing record...");
+    final response = await ApiService.syncSalaryRecord(salary.id!);
+    Navigator.pop(context);
+
+    if (response['error'] == false) {
+      _showSuccess("Record synced successfully");
+      _fetchSalaries();
+    } else {
+      _showError(response['message'] ?? "Failed to sync record");
+    }
+  }
+
+  Future<void> _updateStatus(Salary salary, String status) async {
+    _showLoadingDialog("Updating status...");
+    final response = await ApiService.updateSalaryPaymentStatus(
+      salary.id!,
+      status,
+    );
+    Navigator.pop(context);
+
+    if (response['error'] == false) {
+      _showSuccess("Status updated to $status");
+      _fetchSalaries();
+    } else {
+      _showError(response['message'] ?? "Failed to update status");
+    }
+  }
+
+  Future<void> _markAllPaid() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Mark All as Paid?"),
+        content: Text(
+          "Are you sure you want to mark all unpaid salaries for ${months.firstWhere((m) => m['id'] == selectedMonth)['name']} $selectedYear as Paid?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              "Mark Paid",
+              style: TextStyle(color: AppColors.success),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _showLoadingDialog("Processing bulk payment...");
+      final response = await ApiService.markMonthAsFullyPaid(
+        int.parse(selectedMonth),
+        int.parse(selectedYear),
+      );
+      Navigator.pop(context);
+
+      if (response['error'] == false) {
+        _showSuccess("All salaries marked as paid");
+        _fetchSalaries();
+      } else {
+        _showError(response['message'] ?? "Failed to mark all paid");
+      }
+    }
+  }
+
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
+            Text(message),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppColors.success),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppColors.error),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 24),
-            _buildFilterSection(),
-            const SizedBox(height: 32),
-            _buildPayrollHeaderRow(),
-            const SizedBox(height: 16),
-            _buildPayrollTable(),
-            const SizedBox(height: 100),
-          ],
+      body: RefreshIndicator(
+        onRefresh: _fetchSalaries,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 24),
+              _buildFilterSection(),
+              const SizedBox(height: 24),
+              _buildStatCards(),
+              const SizedBox(height: 32),
+              _buildPayrollHeaderRow(),
+              const SizedBox(height: 16),
+              if (_isLoading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (_errorMessage != null)
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: AppColors.error),
+                      ),
+                      ElevatedButton(
+                        onPressed: _fetchSalaries,
+                        child: const Text("Retry"),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _buildPayrollTable(),
+              const SizedBox(height: 100),
+            ],
+          ),
         ),
       ),
     );
@@ -109,17 +268,20 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
             Expanded(
               child: _buildSmallDropdown(
                 selectedMonth,
-                months,
-                (v) => setState(() => selectedMonth = v!),
+                months.map((m) => m['id']!).toList(),
+                (v) {
+                  setState(() => selectedMonth = v!);
+                  _fetchSalaries();
+                },
+                labels: months.map((m) => m['name']!).toList(),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _buildSmallDropdown(
-                selectedYear,
-                years,
-                (v) => setState(() => selectedYear = v!),
-              ),
+              child: _buildSmallDropdown(selectedYear, years, (v) {
+                setState(() => selectedYear = v!);
+                _fetchSalaries();
+              }),
             ),
           ],
         ),
@@ -128,7 +290,7 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () {}, // Future: Export
                 icon: const Icon(Icons.file_download_outlined, size: 18),
                 label: const Text("Export"),
                 style: OutlinedButton.styleFrom(
@@ -137,14 +299,14 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  side: BorderSide(color: AppColors.grey200),
+                  side: const BorderSide(color: AppColors.grey200),
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: _generateSalaries,
                 icon: const Icon(Icons.bolt_rounded, size: 18),
                 label: const Text("Generate"),
                 style: ElevatedButton.styleFrom(
@@ -167,8 +329,9 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
   Widget _buildSmallDropdown(
     String value,
     List<String> items,
-    void Function(String?) onChanged,
-  ) {
+    void Function(String?) onChanged, {
+    List<String>? labels,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
@@ -180,15 +343,19 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
         child: DropdownButton<String>(
           value: value,
           isDense: true,
+          isExpanded: true,
           padding: const EdgeInsets.symmetric(vertical: 8),
           style: GoogleFonts.inter(
             color: AppColors.navy,
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
-          items: items
-              .map((i) => DropdownMenuItem(value: i, child: Text(i)))
-              .toList(),
+          items: List.generate(items.length, (index) {
+            return DropdownMenuItem(
+              value: items[index],
+              child: Text(labels != null ? labels[index] : items[index]),
+            );
+          }),
           onChanged: onChanged,
         ),
       ),
@@ -196,6 +363,9 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
   }
 
   Widget _buildPayrollHeaderRow() {
+    final monthName = months.firstWhere(
+      (m) => m['id'] == selectedMonth,
+    )['name'];
     return Row(
       children: [
         Column(
@@ -210,7 +380,7 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
               ),
             ),
             Text(
-              "$selectedMonth $selectedYear",
+              "$monthName $selectedYear",
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -221,16 +391,9 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
         ),
         const Spacer(),
         TextButton.icon(
-          onPressed: () {},
-          icon: const Icon(Icons.sync_rounded, size: 16),
-          label: const Text("Sync All Data"),
-          style: TextButton.styleFrom(foregroundColor: AppColors.navy),
-        ),
-        const SizedBox(width: 12),
-        TextButton.icon(
-          onPressed: () {},
+          onPressed: _markAllPaid,
           icon: const Icon(Icons.done_all_rounded, size: 16),
-          label: const Text("Mark All Read"),
+          label: const Text("Mark All Paid"),
           style: TextButton.styleFrom(foregroundColor: AppColors.success),
         ),
       ],
@@ -238,6 +401,22 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
   }
 
   Widget _buildPayrollTable() {
+    if (_salaries.isEmpty) {
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.all(40),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Text(
+            "No salary records for this month. Click 'Generate' to create them.",
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -250,21 +429,20 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
           scrollDirection: Axis.horizontal,
           child: DataTable(
             headingRowColor: WidgetStateProperty.all(
-              AppColors.navy.withValues(alpha: 0.05),
+              AppColors.navy.withOpacity(0.05),
             ),
             columnSpacing: 40,
             columns: [
               _buildDataColumn("Employee"),
-              _buildDataColumn("Base/Rate P/H"),
-              _buildDataColumn("Off Days"),
+              _buildDataColumn("Base Salary"),
+              _buildDataColumn("Payable Days"),
               _buildDataColumn("PL"),
               _buildDataColumn("Absent"),
-              _buildDataColumn("Total Paid"),
               _buildDataColumn("Net Salary"),
               _buildDataColumn("Status"),
               _buildDataColumn("Actions"),
             ],
-            rows: payrollData.map((data) => _buildRow(data)).toList(),
+            rows: _salaries.map((s) => _buildRow(s)).toList(),
           ),
         ),
       ),
@@ -284,14 +462,14 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
     );
   }
 
-  DataRow _buildRow(Map<String, dynamic> data) {
-    final bool isPaid = data['status'] == "Paid";
+  DataRow _buildRow(Salary salary) {
+    final bool isPaid = salary.status?.toLowerCase() == "paid";
 
     return DataRow(
       cells: [
         DataCell(
           Text(
-            data['employee'],
+            salary.user?.name ?? "Unknown",
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -301,25 +479,25 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
         ),
         DataCell(
           Text(
-            data['baseRate'],
+            "₹${salary.baseSalary ?? "0"}",
             style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey600),
           ),
         ),
         DataCell(
           Text(
-            data['offDays'],
+            "${salary.payableDays}",
             style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey600),
           ),
         ),
         DataCell(
           Text(
-            data['pl'],
+            "${salary.totalPl}",
             style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey600),
           ),
         ),
         DataCell(
           Text(
-            data['absent'],
+            "${salary.totalAbsent}",
             style: GoogleFonts.inter(
               fontSize: 13,
               color: AppColors.error,
@@ -329,13 +507,7 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
         ),
         DataCell(
           Text(
-            data['totalPaid'],
-            style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey600),
-          ),
-        ),
-        DataCell(
-          Text(
-            data['netSalary'],
+            "₹${salary.netSalary ?? "0"}",
             style: GoogleFonts.inter(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -344,20 +516,22 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
           ),
         ),
         DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: (isPaid ? AppColors.success : AppColors.error).withValues(
-                alpha: 0.1,
+          InkWell(
+            onTap: () => _updateStatus(salary, isPaid ? "Unpaid" : "Paid"),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: (isPaid ? AppColors.success : AppColors.error)
+                    .withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
               ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              data['status'],
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: isPaid ? AppColors.success : AppColors.error,
+              child: Text(
+                salary.status ?? "Unpaid",
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: isPaid ? AppColors.success : AppColors.error,
+                ),
               ),
             ),
           ),
@@ -366,21 +540,17 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
           Row(
             children: [
               _buildActionIcon(
-                Icons.refresh_rounded,
+                Icons.sync_rounded,
                 AppColors.info,
-                "Refresh",
-              ),
-              const SizedBox(width: 8),
-              _buildActionIcon(
-                Icons.money_off_csred_rounded,
-                AppColors.error,
-                "Unpaid",
+                "Sync/Recalculate",
+                () => _syncRecord(salary),
               ),
               const SizedBox(width: 8),
               _buildActionIcon(
                 Icons.receipt_long_rounded,
                 AppColors.navy,
                 "Deduction Details",
+                () => _showBreakdownDetails(salary),
               ),
             ],
           ),
@@ -389,19 +559,200 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
     );
   }
 
-  Widget _buildActionIcon(IconData icon, Color color, String tooltip) {
+  Widget _buildActionIcon(
+    IconData icon,
+    Color color,
+    String tooltip,
+    VoidCallback onTap,
+  ) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: Tooltip(
         message: tooltip,
         child: Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 16, color: color),
         ),
+      ),
+    );
+  }
+
+  void _showBreakdownDetails(Salary salary) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(30),
+            topRight: Radius.circular(30),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Deduction Reasons",
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: AppColors.navy,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (salary.deductionReasons.isEmpty)
+              const Text("No specific deduction reasons found.")
+            else
+              ...salary.deductionReasons.map(
+                (r) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: AppColors.info,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(r, style: const TextStyle(fontSize: 14)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Close"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCards() {
+    double totalBase = 0;
+    double totalNet = 0;
+    int paidCount = 0;
+
+    for (var s in _salaries) {
+      totalBase += double.tryParse(s.baseSalary ?? "0") ?? 0;
+      totalNet += double.tryParse(s.netSalary ?? "0") ?? 0;
+      if (s.status?.toLowerCase() == "paid") paidCount++;
+    }
+
+    double deductions = totalBase - totalNet;
+
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      childAspectRatio: 1.15,
+      children: [
+        _buildStatTile(
+          "Total Base",
+          "₹${totalBase.toStringAsFixed(0)}",
+          Icons.account_balance_wallet_rounded,
+          AppColors.navy,
+        ),
+        _buildStatTile(
+          "Est. Net Payout",
+          "₹${totalNet.toStringAsFixed(0)}",
+          Icons.payments_rounded,
+          AppColors.success,
+        ),
+        _buildStatTile(
+          "Deductions",
+          "₹${deductions.toStringAsFixed(0)}",
+          Icons.money_off_rounded,
+          AppColors.error,
+        ),
+        _buildStatTile(
+          "Payout Status",
+          "$paidCount / ${_salaries.length} Paid",
+          Icons.check_circle_rounded,
+          AppColors.gold,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatTile(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.grey200, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(height: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.navy,
+                  letterSpacing: -0.5,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.grey400,
+                  letterSpacing: 0.1,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

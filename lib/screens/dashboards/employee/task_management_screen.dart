@@ -48,7 +48,10 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             "priority": _capitalize(i['priority'] ?? 'Medium'),
             "status": _capitalize(i['status'] ?? 'Pending'),
             "dueDate": i['due_date'] ?? 'N/A',
-            "timeTracking": i['total_time_spent'] ?? i['total_seconds']?.toString() ?? '00:00:00',
+            "timeTracking":
+                i['total_time_spent'] ??
+                i['total_seconds']?.toString() ??
+                '00:00:00',
             "raw": i,
           };
         }).toList();
@@ -66,7 +69,10 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             "priority": _capitalize(i['priority'] ?? 'Medium'),
             "status": _capitalize(i['status'] ?? 'Pending'),
             "dueDate": i['due_date'] ?? 'N/A',
-            "timeTracking": i['total_time_spent'] ?? i['total_seconds']?.toString() ?? '00:00:00',
+            "timeTracking":
+                i['total_time_spent'] ??
+                i['total_seconds']?.toString() ??
+                '00:00:00',
             "raw": i,
           };
         }).toList();
@@ -77,7 +83,9 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     if (responseTo['error'] == true && responseBy['error'] == true) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(responseTo['message'] ?? 'Failed to load tasks')),
+          SnackBar(
+            content: Text(responseTo['message'] ?? 'Failed to load tasks'),
+          ),
         );
       }
     }
@@ -93,29 +101,34 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.navy))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.navy),
+            )
           : RefreshIndicator(
               onRefresh: _fetchTasks,
               color: AppColors.navy,
               child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 24),
-            _buildSummaryCards(),
-            const SizedBox(height: 40),
-            _buildToggleButtons(),
-            const SizedBox(height: 24),
-            _buildTableSection(),
-            const SizedBox(height: 100),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 24),
+                    _buildSummaryCards(),
+                    const SizedBox(height: 40),
+                    _buildToggleButtons(),
+                    const SizedBox(height: 24),
+                    _buildTableSection(),
+                    const SizedBox(height: 100),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
 
   Widget _buildHeader() {
     return Row(
@@ -174,7 +187,7 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
         final double width = constraints.maxWidth;
         // On very small screens, 2 columns, otherwise 4
         final int crossAxisCount = width < 600 ? 2 : 4;
-        
+
         return GridView.count(
           crossAxisCount: crossAxisCount,
           crossAxisSpacing: 20,
@@ -184,28 +197,47 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
           childAspectRatio: width < 600 ? 1.4 : 1.8,
           children: [
             _buildStatCard(
-                "Assigned To Me",
-                _assignedToMeTasks.length.toString(),
-                Icons.assignment_ind_rounded,
-                AppColors.info,
-                isActive: _isAssignedToMe,
-                onTap: () => setState(() => _isAssignedToMe = true)),
+              "Assigned To Me",
+              _assignedToMeTasks.length.toString(),
+              Icons.assignment_ind_rounded,
+              AppColors.info,
+              isActive: _isAssignedToMe,
+              onTap: () => setState(() => _isAssignedToMe = true),
+            ),
             _buildStatCard(
-                "Tasks Given By Me",
-                _assignedByMeTasks.length.toString(),
-                Icons.assignment_return_rounded,
-                AppColors.navy,
-                isActive: !_isAssignedToMe,
-                onTap: () => setState(() => _isAssignedToMe = false)),
-            _buildStatCard("Pending Tasks", "5", Icons.pending_actions_rounded, AppColors.warning),
-            _buildStatCard("Urgent Tasks", "2", Icons.priority_high_rounded, AppColors.error),
+              "Tasks Given By Me",
+              _assignedByMeTasks.length.toString(),
+              Icons.assignment_return_rounded,
+              AppColors.navy,
+              isActive: !_isAssignedToMe,
+              onTap: () => setState(() => _isAssignedToMe = false),
+            ),
+            _buildStatCard(
+              "Pending Tasks",
+              "5",
+              Icons.pending_actions_rounded,
+              AppColors.warning,
+            ),
+            _buildStatCard(
+              "Urgent Tasks",
+              "2",
+              Icons.priority_high_rounded,
+              AppColors.error,
+            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildStatCard(String title, String count, IconData icon, Color color, {bool isActive = false, VoidCallback? onTap}) {
+  Widget _buildStatCard(
+    String title,
+    String count,
+    IconData icon,
+    Color color, {
+    bool isActive = false,
+    VoidCallback? onTap,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -214,7 +246,10 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
         decoration: BoxDecoration(
           color: isActive ? color.withValues(alpha: 0.05) : AppColors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isActive ? color : AppColors.grey200, width: isActive ? 2 : 1),
+          border: Border.all(
+            color: isActive ? color : AppColors.grey200,
+            width: isActive ? 2 : 1,
+          ),
           boxShadow: [
             BoxShadow(
               color: color.withValues(alpha: 0.1),
@@ -223,45 +258,45 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             ),
           ],
         ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
                 ),
-                child: Icon(icon, color: color, size: 20),
-              ),
-              Text(
-                count,
-                style: GoogleFonts.inter(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.navy,
+                Text(
+                  count,
+                  style: GoogleFonts.inter(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.navy,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.grey600,
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.grey600,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildToggleButtons() {
     return Row(
@@ -300,7 +335,7 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
                     color: AppColors.navy.withValues(alpha: 0.2),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
-                  )
+                  ),
                 ]
               : [],
         ),
@@ -408,7 +443,9 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
                 radius: 12,
                 backgroundColor: AppColors.navy.withValues(alpha: 0.1),
                 child: Text(
-                  _isAssignedToMe ? task['assignedBy'][0] : task['assignedTo'][0],
+                  _isAssignedToMe
+                      ? task['assignedBy'][0]
+                      : task['assignedTo'][0],
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -427,7 +464,9 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             ],
           ),
         ),
-        DataCell(_buildBadge(task['priority'], _getPriorityColor(task['priority']))),
+        DataCell(
+          _buildBadge(task['priority'], _getPriorityColor(task['priority'])),
+        ),
         DataCell(_buildBadge(task['status'], _getStatusColor(task['status']))),
         DataCell(
           Text(
@@ -442,12 +481,18 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
               decoration: BoxDecoration(
                 color: AppColors.navy.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.navy.withValues(alpha: 0.1)),
+                border: Border.all(
+                  color: AppColors.navy.withValues(alpha: 0.1),
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.timer_outlined, size: 14, color: AppColors.navy),
+                  const Icon(
+                    Icons.timer_outlined,
+                    size: 14,
+                    color: AppColors.navy,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     task['timeTracking'],
@@ -466,16 +511,41 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             mainAxisSize: MainAxisSize.min,
             children: _isAssignedToMe
                 ? [
-                    _buildActionBtn("View", Icons.visibility_rounded, AppColors.navy, () => _viewTaskDetails(task)),
+                    _buildActionBtn(
+                      "View",
+                      Icons.visibility_rounded,
+                      AppColors.navy,
+                      () => _viewTaskDetails(task),
+                    ),
                     const SizedBox(width: 8),
-                    _buildActionBtn("Status", Icons.update_rounded, AppColors.info, () => _showUpdateStatusDialog(task)),
+                    _buildActionBtn(
+                      "Status",
+                      Icons.update_rounded,
+                      AppColors.info,
+                      () => _showUpdateStatusDialog(task),
+                    ),
                   ]
                 : [
-                    _buildActionBtn("Edit", Icons.edit_rounded, AppColors.info, () {}),
+                    _buildActionBtn(
+                      "Edit",
+                      Icons.edit_rounded,
+                      AppColors.info,
+                      () => _showAddTaskDialog(editTask: task['raw']),
+                    ),
                     const SizedBox(width: 8),
-                    _buildActionBtn("View", Icons.visibility_rounded, AppColors.navy, () => _viewTaskDetails(task)),
+                    _buildActionBtn(
+                      "View",
+                      Icons.visibility_rounded,
+                      AppColors.navy,
+                      () => _viewTaskDetails(task),
+                    ),
                     const SizedBox(width: 8),
-                    _buildActionBtn("Delete", Icons.delete_outline_rounded, AppColors.error, () {}),
+                    _buildActionBtn(
+                      "Delete",
+                      Icons.delete_outline_rounded,
+                      AppColors.error,
+                      () => _deleteTask(task['id']),
+                    ),
                   ],
           ),
         ),
@@ -492,7 +562,12 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
           children: [
             const Icon(Icons.assignment_rounded, color: AppColors.navy),
             const SizedBox(width: 12),
-            Expanded(child: Text("Task Details", style: GoogleFonts.inter(fontWeight: FontWeight.bold))),
+            Expanded(
+              child: Text(
+                "Task Details",
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
+            ),
             _buildBadge(task['status'], _getStatusColor(task['status'])),
           ],
         ),
@@ -502,8 +577,14 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _detailItem("Title", task['taskDetails']),
-              _detailItem("Description", task['raw']['description'] ?? 'No description provided'),
-              _detailItem(_isAssignedToMe ? "Assigned By" : "Assigned To", _isAssignedToMe ? task['assignedBy'] : task['assignedTo']),
+              _detailItem(
+                "Description",
+                task['raw']['description'] ?? 'No description provided',
+              ),
+              _detailItem(
+                _isAssignedToMe ? "Assigned By" : "Assigned To",
+                _isAssignedToMe ? task['assignedBy'] : task['assignedTo'],
+              ),
               Row(
                 children: [
                   Expanded(child: _detailItem("Priority", task['priority'])),
@@ -511,25 +592,40 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
                 ],
               ),
               _detailItem("Time Spent", task['timeTracking']),
-              if (task['raw']['attachments'] != null && (task['raw']['attachments'] as List).isNotEmpty)
+              if (task['raw']['attachments'] != null &&
+                  (task['raw']['attachments'] as List).isNotEmpty)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 12),
-                    Text("Attachments", style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(
+                      "Attachments",
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    ... (task['raw']['attachments'] as List).map((a) => ListTile(
-                      leading: const Icon(Icons.attach_file, size: 18),
-                      title: Text(a['file_name'] ?? 'File', style: const TextStyle(fontSize: 12)),
-                      dense: true,
-                    )),
+                    ...(task['raw']['attachments'] as List).map(
+                      (a) => ListTile(
+                        leading: const Icon(Icons.attach_file, size: 18),
+                        title: Text(
+                          a['file_name'] ?? 'File',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        dense: true,
+                      ),
+                    ),
                   ],
                 ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
         ],
       ),
     );
@@ -541,9 +637,23 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 11, color: AppColors.grey400, fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: AppColors.grey400,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(value, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.navy)),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.navy,
+            ),
+          ),
         ],
       ),
     );
@@ -553,7 +663,10 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Update Status", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        title: Text(
+          "Update Status",
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -567,7 +680,10 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.play_arrow_rounded, color: AppColors.success),
+              leading: const Icon(
+                Icons.play_arrow_rounded,
+                color: AppColors.success,
+              ),
               title: const Text("Start Timer"),
               onTap: () => _handleTimer(task['id'], true),
             ),
@@ -601,16 +717,18 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
   Future<void> _handleTimer(dynamic id, bool start) async {
     Navigator.pop(context);
     setState(() => _isLoading = true);
-    final response = start 
+    final response = start
         ? await ApiService.startTaskTimer(id)
         : await ApiService.stopTaskTimer(id);
-    
+
     if (response['error'] == false) {
       _fetchTasks();
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response['message'] ?? 'Timer operation failed')),
+          SnackBar(
+            content: Text(response['message'] ?? 'Timer operation failed'),
+          ),
         );
       }
       setState(() => _isLoading = false);
@@ -647,7 +765,12 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     return AppColors.success;
   }
 
-  Widget _buildActionBtn(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildActionBtn(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -676,18 +799,58 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     );
   }
 
-  void _showAddTaskDialog() {
+  void _showAddTaskDialog({Map<String, dynamic>? editTask}) {
     showDialog(
       context: context,
       builder: (context) {
-        return const _AddTaskDialog();
+        return _AddTaskDialog(
+          editTask: editTask,
+          onSuccess: () => _fetchTasks(),
+        );
       },
     );
+  }
+
+  Future<void> _deleteTask(dynamic id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Task"),
+        content: const Text("Are you sure you want to delete this task?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      final response = await ApiService.deleteEmployeeTask(id);
+      if (response['error'] == false) {
+        _fetchTasks();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response['message'] ?? 'Delete failed')),
+          );
+        }
+        setState(() => _isLoading = false);
+      }
+    }
   }
 }
 
 class _AddTaskDialog extends StatefulWidget {
-  const _AddTaskDialog();
+  final Map<String, dynamic>? editTask;
+  final VoidCallback onSuccess;
+  const _AddTaskDialog({this.editTask, required this.onSuccess});
 
   @override
   State<_AddTaskDialog> createState() => _AddTaskDialogState();
@@ -695,10 +858,107 @@ class _AddTaskDialog extends StatefulWidget {
 
 class _AddTaskDialogState extends State<_AddTaskDialog> {
   final _formKey = GlobalKey<FormState>();
-  String _selectedPriority = "Medium";
-  DateTime? _selectedDueDate = DateTime.now();
+  late TextEditingController _titleController;
+  late TextEditingController _descriptionController;
+  String _selectedPriority = "medium";
+  DateTime _selectedDueDate = DateTime.now();
+  String? _selectedAssigneeId;
+  bool _isSaving = false;
+  List<Map<String, dynamic>> _employees = [];
 
-  final List<String> _priorities = ["Low", "Medium", "High", "Urgent"];
+  final List<String> _priorities = ["low", "medium", "high", "urgent"];
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(
+      text: widget.editTask?['title'] ?? "",
+    );
+    _descriptionController = TextEditingController(
+      text: widget.editTask?['description'] ?? "",
+    );
+    _selectedPriority = (widget.editTask?['priority'] ?? 'medium')
+        .toLowerCase();
+
+    if (widget.editTask?['due_date'] != null) {
+      try {
+        _selectedDueDate = DateTime.parse(widget.editTask!['due_date']);
+      } catch (_) {}
+    }
+
+    _fetchEmployees();
+  }
+
+  Future<void> _fetchEmployees() async {
+    final res = await ApiService.getEmployeeProfiles();
+    if (res['error'] == false) {
+      if (mounted) {
+        setState(() {
+          _employees = List<Map<String, dynamic>>.from(res['data'] ?? []);
+          if (widget.editTask != null) {
+            _selectedAssigneeId = widget.editTask?['assigned_to']?.toString();
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSave() async {
+    if (!_formKey.currentState!.validate() || _selectedAssigneeId == null) {
+      if (_selectedAssigneeId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select an assignee")),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    final data = {
+      'title': _titleController.text,
+      'description': _descriptionController.text,
+      'priority': _selectedPriority,
+      'due_date': DateFormat('yyyy-MM-dd').format(_selectedDueDate),
+      'assigned_to': _selectedAssigneeId,
+    };
+
+    final res = widget.editTask == null
+        ? await ApiService.createEmployeeTask(data)
+        : await ApiService.updateEmployeeTask(widget.editTask!['id'], data);
+
+    if (mounted) {
+      if (res['error'] == false) {
+        widget.onSuccess();
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.editTask == null
+                  ? "Task added successfully"
+                  : "Task updated successfully",
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? "Error saving task"),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+    setState(() => _isSaving = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -742,15 +1002,23 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
                       ),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close_rounded,
-                            color: AppColors.grey400),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: AppColors.grey400,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 24),
-                  _buildTextField("Task Title"),
+                  _buildTextField("Task Title", _titleController),
                   const SizedBox(height: 16),
-                  _buildTextField("Task Details / Description", maxLines: 3),
+                  _buildTextField(
+                    "Task Details / Description",
+                    _descriptionController,
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildAssigneeDropdown(),
                   const SizedBox(height: 16),
                   _buildDropdownField(
                     "Priority",
@@ -765,17 +1033,7 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Task added successfully"),
-                              backgroundColor: AppColors.success,
-                            ),
-                          );
-                        }
-                      },
+                      onPressed: _isSaving ? null : _handleSave,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navy,
                         foregroundColor: AppColors.white,
@@ -785,7 +1043,11 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
                         elevation: 0,
                       ),
                       child: Text(
-                        "Save Task",
+                        _isSaving
+                            ? "Saving..."
+                            : (widget.editTask == null
+                                  ? "Save Task"
+                                  : "Update Task"),
                         style: GoogleFonts.inter(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -802,47 +1064,43 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
     );
   }
 
-  Widget _buildDropdownField(
+  Widget _buildTextField(
     String label,
-    String value,
-    List<String> items,
-    ValueChanged<String?> onChanged,
-  ) {
+    TextEditingController controller, {
+    int maxLines = 1,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
             color: AppColors.navy,
           ),
         ),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: AppColors.offWhite,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.grey100),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              isExpanded: true,
-              dropdownColor: AppColors.white,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                  color: AppColors.grey400),
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: AppColors.navy,
-                fontWeight: FontWeight.w500,
-              ),
-              items: items
-                  .map((i) => DropdownMenuItem(value: i, child: Text(i)))
-                  .toList(),
-              onChanged: onChanged,
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          maxLines: maxLines,
+          style: GoogleFonts.inter(fontSize: 14),
+          validator: (v) => v!.isEmpty ? "Required" : null,
+          decoration: InputDecoration(
+            hintText: "Enter $label",
+            hintStyle: GoogleFonts.inter(
+              color: AppColors.grey400,
+              fontSize: 13,
+            ),
+            filled: true,
+            fillColor: AppColors.offWhite,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
             ),
           ),
         ),
@@ -850,43 +1108,88 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
     );
   }
 
-  Widget _buildTextField(String label, {int maxLines = 1}) {
+  Widget _buildAssigneeDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Assign To",
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.navy,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: AppColors.offWhite,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: _selectedAssigneeId,
+              hint: Text(
+                "Select Employee",
+                style: GoogleFonts.inter(fontSize: 13),
+              ),
+              items: _employees
+                  .map(
+                    (e) => DropdownMenuItem(
+                      value: (e['user_id'] ?? e['id']).toString(),
+                      child: Text(e['user']?['name'] ?? e['name'] ?? "Unknown"),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) => setState(() => _selectedAssigneeId = v),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropdownField(
+    String label,
+    String value,
+    List<String> items,
+    Function(String?) onTap,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
             color: AppColors.navy,
           ),
         ),
-        const SizedBox(height: 6),
-        TextFormField(
-          maxLines: maxLines,
-          style: GoogleFonts.inter(fontSize: 14, color: AppColors.navy),
-          decoration: InputDecoration(
-            fillColor: AppColors.offWhite,
-            filled: true,
-            hintText: "Enter $label...",
-            hintStyle:
-                GoogleFonts.inter(fontSize: 14, color: AppColors.grey400),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.grey100),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: AppColors.grey100),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.navy, width: 1.5),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: AppColors.offWhite,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: value,
+              items: items
+                  .map(
+                    (i) => DropdownMenuItem(
+                      value: i,
+                      child: Text(i.toUpperCase()),
+                    ),
+                  )
+                  .toList(),
+              onChanged: onTap,
             ),
           ),
-          validator: (value) =>
-              value == null || value.isEmpty ? "Required component" : null,
         ),
       ],
     );
@@ -899,44 +1202,40 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
         Text(
           "Due Date",
           style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
             color: AppColors.navy,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         InkWell(
           onTap: () async {
-            final date = await showDatePicker(
+            final picked = await showDatePicker(
               context: context,
-              initialDate: _selectedDueDate ?? DateTime.now(),
-              firstDate: DateTime(2020),
-              lastDate: DateTime(2030),
+              initialDate: _selectedDueDate,
+              firstDate: DateTime.now().subtract(const Duration(days: 30)),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
             );
-            if (date != null) setState(() => _selectedDueDate = date);
+            if (picked != null) setState(() => _selectedDueDate = picked);
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: AppColors.offWhite,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.grey100),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  _selectedDueDate == null
-                      ? "Select Date"
-                      : DateFormat('dd MMM, yyyy').format(_selectedDueDate!),
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: AppColors.navy,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  DateFormat('yyyy-MM-dd').format(_selectedDueDate),
+                  style: GoogleFonts.inter(fontSize: 14, color: AppColors.navy),
                 ),
-                const Icon(Icons.calendar_month_rounded,
-                    color: AppColors.grey400, size: 20),
+                const Icon(
+                  Icons.calendar_today_rounded,
+                  size: 18,
+                  color: AppColors.navy,
+                ),
               ],
             ),
           ),

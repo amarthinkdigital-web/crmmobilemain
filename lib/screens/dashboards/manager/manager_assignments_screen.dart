@@ -8,7 +8,8 @@ class ManagerAssignmentsScreen extends StatefulWidget {
   const ManagerAssignmentsScreen({super.key});
 
   @override
-  State<ManagerAssignmentsScreen> createState() => _ManagerAssignmentsScreenState();
+  State<ManagerAssignmentsScreen> createState() =>
+      _ManagerAssignmentsScreenState();
 }
 
 class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
@@ -32,10 +33,7 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
   }
 
   Future<void> _fetchInitialData() async {
-    await Future.wait([
-      _fetchTasks(),
-      _fetchEmployees(),
-    ]);
+    await Future.wait([_fetchTasks(), _fetchEmployees()]);
   }
 
   Future<void> _fetchEmployees() async {
@@ -43,30 +41,38 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
     if (response['error'] == false) {
       final List raw = response['data'] ?? [];
       setState(() {
-        _employees = raw.map((e) => {
-          'id': e['user_id']?.toString() ?? e['id']?.toString(),
-          'name': e['user']?['name'] ?? e['name'] ?? 'Unknown',
-        }).toList();
+        _employees = raw
+            .map(
+              (e) => {
+                'id': e['user_id']?.toString() ?? e['id']?.toString(),
+                'name': e['user']?['name'] ?? e['name'] ?? 'Unknown',
+              },
+            )
+            .toList();
       });
     }
   }
 
   Future<void> _fetchTasks() async {
     setState(() => _isLoading = true);
-    
+
     if (_selectedEmployeeId != null) {
       // Special mode: Fetch tasks related to specific employee
-      final futureTo = ApiService.getManagerTasks(queryParams: {'assigned_to': _selectedEmployeeId});
-      final futureBy = ApiService.getManagerTasks(queryParams: {'assigned_by': _selectedEmployeeId});
-      
+      final futureTo = ApiService.getManagerTasks(
+        queryParams: {'assigned_to': _selectedEmployeeId},
+      );
+      final futureBy = ApiService.getManagerTasks(
+        queryParams: {'assigned_by': _selectedEmployeeId},
+      );
+
       final results = await Future.wait([futureTo, futureBy]);
       final respTo = results[0];
       final respBy = results[1];
-      
+
       if (respTo['error'] == false || respBy['error'] == false) {
         final List tasksTo = respTo['data'] ?? [];
         final List tasksBy = respBy['data'] ?? [];
-        
+
         setState(() {
           _tasks = [
             ...tasksTo.map((i) => _mapTask(i, category: 'Assigned TO')),
@@ -101,7 +107,8 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
       "priority": _capitalize(i['priority'] ?? 'Medium'),
       "status": _capitalize(i['status'] ?? 'Pending'),
       "due": i['due_date'] ?? 'N/A',
-      "spent": i['total_time_spent'] ?? i['total_seconds']?.toString() ?? '0h 0m',
+      "spent":
+          i['total_time_spent'] ?? i['total_seconds']?.toString() ?? '0h 0m',
       "category": category,
       "raw": i,
     };
@@ -109,9 +116,9 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
 
   void _handleFetchError(String? msg) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg ?? 'Failed to load tasks')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(msg ?? 'Failed to load tasks')));
     }
     setState(() => _isLoading = false);
   }
@@ -119,14 +126,17 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
   List<Map<String, dynamic>> get _filteredTasks {
     return _tasks.where((t) {
       final query = _searchController.text.toLowerCase();
-      final matchesSearch = t['details'].toLowerCase().contains(query) || 
-                           t['id'].toString().contains(query) ||
-                           t['giver'].toLowerCase().contains(query) ||
-                           t['receiver'].toLowerCase().contains(query);
-      
-      final matchesStatus = _statusFilter == "All Status" || t['status'] == _statusFilter;
-      final matchesPriority = _priorityFilter == "All Priority" || t['priority'] == _priorityFilter;
-      
+      final matchesSearch =
+          t['details'].toLowerCase().contains(query) ||
+          t['id'].toString().contains(query) ||
+          t['giver'].toLowerCase().contains(query) ||
+          t['receiver'].toLowerCase().contains(query);
+
+      final matchesStatus =
+          _statusFilter == "All Status" || t['status'] == _statusFilter;
+      final matchesPriority =
+          _priorityFilter == "All Priority" || t['priority'] == _priorityFilter;
+
       bool matchesDate = true;
       if (_dateFilter != 'Task Given To Date') {
         DateTime? taskDate;
@@ -137,13 +147,20 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
         if (taskDate != null) {
           final now = DateTime.now();
           if (_dateFilter == 'Today') {
-            matchesDate = taskDate.year == now.year && taskDate.month == now.month && taskDate.day == now.day;
+            matchesDate =
+                taskDate.year == now.year &&
+                taskDate.month == now.month &&
+                taskDate.day == now.day;
           } else if (_dateFilter == 'This Week') {
             final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-            matchesDate = taskDate.isAfter(startOfWeek.subtract(const Duration(days: 1))) && 
-                          taskDate.isBefore(startOfWeek.add(const Duration(days: 7)));
+            matchesDate =
+                taskDate.isAfter(
+                  startOfWeek.subtract(const Duration(days: 1)),
+                ) &&
+                taskDate.isBefore(startOfWeek.add(const Duration(days: 7)));
           } else if (_dateFilter == 'This Month') {
-            matchesDate = taskDate.year == now.year && taskDate.month == now.month;
+            matchesDate =
+                taskDate.year == now.year && taskDate.month == now.month;
           }
         }
       }
@@ -161,30 +178,32 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: _isLoading 
-          ? const Center(child: CircularProgressIndicator(color: AppColors.navy))
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.navy),
+            )
           : RefreshIndicator(
               onRefresh: _fetchTasks,
               color: AppColors.navy,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 24),
-            _buildTaskStats(),
-            const SizedBox(height: 24),
-            _buildFiltersAndSearch(),
-            const SizedBox(height: 24),
-            _buildTaskTable(),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 24),
+                    _buildTaskStats(),
+                    const SizedBox(height: 24),
+                    _buildFiltersAndSearch(),
+                    const SizedBox(height: 24),
+                    _buildTaskTable(),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
 
   Widget _buildHeader() {
     return Row(
@@ -206,7 +225,9 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.navy,
             foregroundColor: AppColors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         ),
       ],
@@ -216,15 +237,17 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
   void _showAddTaskDialog({Map<String, dynamic>? editTask}) {
     showDialog(
       context: context,
-      builder: (context) => _TaskActionDialog(
-        editTask: editTask,
-        onSuccess: () => _fetchTasks(),
-      ),
+      builder: (context) =>
+          _TaskActionDialog(editTask: editTask, onSuccess: () => _fetchTasks()),
     );
   }
 
   int _countByStatus(String status) {
-    return _tasks.where((t) => t['status'].toString().toLowerCase() == status.toLowerCase()).length;
+    return _tasks
+        .where(
+          (t) => t['status'].toString().toLowerCase() == status.toLowerCase(),
+        )
+        .length;
   }
 
   Widget _buildTaskStats() {
@@ -233,17 +256,41 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
       physics: const BouncingScrollPhysics(),
       child: Row(
         children: [
-          _buildStatCard("Total Tasks", _tasks.length.toString(), AppColors.navy),
+          _buildStatCard(
+            "Total Tasks",
+            _tasks.length.toString(),
+            AppColors.navy,
+          ),
           const SizedBox(width: 12),
-          _buildStatCard("Pending", _countByStatus("Pending").toString(), AppColors.warning),
+          _buildStatCard(
+            "Pending",
+            _countByStatus("Pending").toString(),
+            AppColors.warning,
+          ),
           const SizedBox(width: 12),
-          _buildStatCard("In Progress", _countByStatus("In Progress").toString(), AppColors.info),
+          _buildStatCard(
+            "In Progress",
+            _countByStatus("In Progress").toString(),
+            AppColors.info,
+          ),
           const SizedBox(width: 12),
-          _buildStatCard("Completed", _countByStatus("Completed").toString(), AppColors.success),
+          _buildStatCard(
+            "Completed",
+            _countByStatus("Completed").toString(),
+            AppColors.success,
+          ),
           const SizedBox(width: 12),
-          _buildStatCard("Overdue", _countByStatus("Overdue").toString(), AppColors.error),
+          _buildStatCard(
+            "Overdue",
+            _countByStatus("Overdue").toString(),
+            AppColors.error,
+          ),
           const SizedBox(width: 12),
-          _buildStatCard("Urgent", _tasks.where((t) => t['priority'] == 'Urgent').length.toString(), Colors.deepOrange),
+          _buildStatCard(
+            "Urgent",
+            _tasks.where((t) => t['priority'] == 'Urgent').length.toString(),
+            Colors.deepOrange,
+          ),
         ],
       ),
     );
@@ -269,13 +316,21 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
         children: [
           Text(
             value,
-            style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w800, color: color),
+            style: GoogleFonts.inter(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             label,
             textAlign: TextAlign.center,
-            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.grey400),
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: AppColors.grey400,
+            ),
           ),
         ],
       ),
@@ -290,13 +345,28 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.grey100),
       ),
-      child: Column( 
+      child: Column(
         children: [
           Row(
             children: [
-              Expanded(child: _buildDropdown(_statusFilter, ['All Status', 'Pending', 'In Progress', 'Completed'], (v) => setState(() => _statusFilter = v!))),
+              Expanded(
+                child: _buildDropdown(_statusFilter, [
+                  'All Status',
+                  'Pending',
+                  'In Progress',
+                  'Completed',
+                ], (v) => setState(() => _statusFilter = v!)),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _buildDropdown(_priorityFilter, ['All Priority', 'High', 'Medium', 'Low', 'Urgent'], (v) => setState(() => _priorityFilter = v!))),
+              Expanded(
+                child: _buildDropdown(_priorityFilter, [
+                  'All Priority',
+                  'High',
+                  'Medium',
+                  'Low',
+                  'Urgent',
+                ], (v) => setState(() => _priorityFilter = v!)),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -304,8 +374,11 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
             children: [
               Expanded(
                 child: _buildDropdown(
-                  _employeeFilterName, 
-                  ['All Employees', ..._employees.map((e) => e['name'].toString())], 
+                  _employeeFilterName,
+                  [
+                    'All Employees',
+                    ..._employees.map((e) => e['name'].toString()),
+                  ],
                   (v) {
                     if (v == 'All Employees') {
                       setState(() {
@@ -320,11 +393,18 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
                       });
                     }
                     _fetchTasks();
-                  }
-                )
+                  },
+                ),
               ),
               const SizedBox(width: 12),
-              Expanded(child: _buildDropdown(_dateFilter, ['Task Given To Date', 'Today', 'This Week', 'This Month'], (v) => setState(() => _dateFilter = v!))),
+              Expanded(
+                child: _buildDropdown(_dateFilter, [
+                  'Task Given To Date',
+                  'Today',
+                  'This Week',
+                  'This Month',
+                ], (v) => setState(() => _dateFilter = v!)),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -333,11 +413,21 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
             style: GoogleFonts.inter(fontSize: 14),
             decoration: InputDecoration(
               hintText: "Search tasks...",
-              hintStyle: GoogleFonts.inter(color: AppColors.grey400, fontSize: 13),
-              prefixIcon: const Icon(Icons.search_rounded, color: AppColors.grey400, size: 20),
+              hintStyle: GoogleFonts.inter(
+                color: AppColors.grey400,
+                fontSize: 13,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: AppColors.grey400,
+                size: 20,
+              ),
               filled: true,
               fillColor: AppColors.offWhite,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -353,7 +443,11 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
     );
   }
 
-  Widget _buildDropdown(String value, List<String> items, Function(String?) onChanged) {
+  Widget _buildDropdown(
+    String value,
+    List<String> items,
+    Function(String?) onChanged,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
@@ -366,9 +460,19 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
           isExpanded: true,
           value: value,
           isDense: true,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.grey600, size: 20),
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
-          items: items.map((String e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: AppColors.grey600,
+            size: 20,
+          ),
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.navy,
+          ),
+          items: items
+              .map((String e) => DropdownMenuItem(value: e, child: Text(e)))
+              .toList(),
           onChanged: onChanged,
         ),
       ),
@@ -396,7 +500,11 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
             padding: const EdgeInsets.all(20),
             child: Text(
               "Task List",
-              style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy),
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
             ),
           ),
           const Divider(height: 1, color: AppColors.grey100),
@@ -407,82 +515,223 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
               columnSpacing: 40,
               horizontalMargin: 20,
               columns: [
-                if (_selectedEmployeeId != null) DataColumn(label: Text("Relation", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
-                DataColumn(label: Text("Task Details", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
-                DataColumn(label: Text("Assign Giver", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
-                DataColumn(label: Text("Assign Receiver", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
-                DataColumn(label: Text("Priority", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
-                DataColumn(label: Text("Status", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
-                DataColumn(label: Text("Due Date", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
-                DataColumn(label: Text("Time Spent", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
-                DataColumn(label: Text("Actions", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13))),
+                if (_selectedEmployeeId != null)
+                  DataColumn(
+                    label: Text(
+                      "Relation",
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                DataColumn(
+                  label: Text(
+                    "Task Details",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "Assign Giver",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "Assign Receiver",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "Priority",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "Status",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "Due Date",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "Time Spent",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "Actions",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
               ],
               rows: _filteredTasks.map((task) {
                 Color priorityColor = AppColors.grey600;
                 if (task['priority'] == 'High') priorityColor = AppColors.error;
-                if (task['priority'] == 'Urgent') priorityColor = Colors.deepOrange;
-                if (task['priority'] == 'Medium') priorityColor = AppColors.warning;
+                if (task['priority'] == 'Urgent')
+                  priorityColor = Colors.deepOrange;
+                if (task['priority'] == 'Medium')
+                  priorityColor = AppColors.warning;
 
                 Color statusColor = AppColors.grey600;
-                if (task['status'] == 'Completed') statusColor = AppColors.success;
-                if (task['status'] == 'In Progress') statusColor = AppColors.info;
-                if (task['status'] == 'Pending') statusColor = AppColors.warning;
+                if (task['status'] == 'Completed')
+                  statusColor = AppColors.success;
+                if (task['status'] == 'In Progress')
+                  statusColor = AppColors.info;
+                if (task['status'] == 'Pending')
+                  statusColor = AppColors.warning;
 
-                return DataRow(cells: [
-                  if (_selectedEmployeeId != null)
-                    DataCell(Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: (task['category']?.contains('TO') ?? false) ? AppColors.info.withOpacity(0.1) : AppColors.warning.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        task['category'] ?? 'N/A',
-                        style: GoogleFonts.inter(
-                          color: (task['category']?.contains('TO') ?? false) ? AppColors.info : AppColors.warning,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10,
+                return DataRow(
+                  cells: [
+                    if (_selectedEmployeeId != null)
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (task['category']?.contains('TO') ?? false)
+                                ? AppColors.info.withOpacity(0.1)
+                                : AppColors.warning.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            task['category'] ?? 'N/A',
+                            style: GoogleFonts.inter(
+                              color: (task['category']?.contains('TO') ?? false)
+                                  ? AppColors.info
+                                  : AppColors.warning,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
                         ),
                       ),
-                    )),
-                  DataCell(SizedBox(
-                    width: 200,
-                    child: Text(task['details'], 
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppColors.navy)),
-                  )),
-                  DataCell(Text(task['giver'])),
-                  DataCell(Text(task['receiver'])),
-                  DataCell(Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: priorityColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                    child: Text(task['priority'], style: GoogleFonts.inter(color: priorityColor, fontWeight: FontWeight.bold, fontSize: 11)),
-                  )),
-                  DataCell(Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                    child: Text(task['status'], style: GoogleFonts.inter(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11)),
-                  )),
-                  DataCell(Text(task['due'])),
-                  DataCell(Text(task['spent'])),
-                  DataCell(Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.visibility_outlined, color: AppColors.info, size: 20),
-                        onPressed: () => _viewTaskDetails(task),
+                    DataCell(
+                      SizedBox(
+                        width: 200,
+                        child: Text(
+                          task['details'],
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.navy,
+                          ),
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, color: AppColors.navy, size: 20),
-                        onPressed: () => _showAddTaskDialog(editTask: task['raw']),
+                    ),
+                    DataCell(Text(task['giver'])),
+                    DataCell(Text(task['receiver'])),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: priorityColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          task['priority'],
+                          style: GoogleFonts.inter(
+                            color: priorityColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
-                        onPressed: () => _deleteTask(task['id']),
+                    ),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          task['status'],
+                          style: GoogleFonts.inter(
+                            color: statusColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
                       ),
-                    ],
-                  )),
-                ]);
+                    ),
+                    DataCell(Text(task['due'])),
+                    DataCell(Text(task['spent'])),
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.visibility_outlined,
+                              color: AppColors.info,
+                              size: 20,
+                            ),
+                            onPressed: () => _viewTaskDetails(task),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              color: AppColors.navy,
+                              size: 20,
+                            ),
+                            onPressed: () =>
+                                _showAddTaskDialog(editTask: task['raw']),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: AppColors.error,
+                              size: 20,
+                            ),
+                            onPressed: () => _deleteTask(task['id']),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
               }).toList(),
             ),
           ),
@@ -497,7 +746,10 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(task['details'], style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        title: Text(
+          task['details'],
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,11 +759,17 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
             _detailText("Priority", task['priority']),
             _detailText("Status", task['status']),
             _detailText("Due Date", task['due']),
-            _detailText("Description", task['raw']['description'] ?? 'No description'),
+            _detailText(
+              "Description",
+              task['raw']['description'] ?? 'No description',
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
         ],
       ),
     );
@@ -524,7 +782,10 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
         text: TextSpan(
           style: GoogleFonts.inter(color: AppColors.navy, fontSize: 13),
           children: [
-            TextSpan(text: "$label: ", style: const TextStyle(fontWeight: FontWeight.bold)),
+            TextSpan(
+              text: "$label: ",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             TextSpan(text: value),
           ],
         ),
@@ -539,8 +800,14 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
         title: const Text("Delete Task"),
         content: const Text("Are you sure you want to delete this task?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
@@ -583,8 +850,12 @@ class _TaskActionDialogState extends State<_TaskActionDialog> {
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.editTask?['title'] ?? "");
-    _descriptionController = TextEditingController(text: widget.editTask?['description'] ?? "");
+    _titleController = TextEditingController(
+      text: widget.editTask?['title'] ?? "",
+    );
+    _descriptionController = TextEditingController(
+      text: widget.editTask?['description'] ?? "",
+    );
     _priority = (widget.editTask?['priority'] ?? 'medium').toLowerCase();
     _fetchEmployees();
   }
@@ -620,17 +891,30 @@ class _TaskActionDialogState extends State<_TaskActionDialog> {
               DropdownButtonFormField<String>(
                 value: _assigneeId,
                 decoration: const InputDecoration(labelText: "Assign To"),
-                items: _employees.map((e) => DropdownMenuItem(
-                  value: (e['user_id'] ?? e['id']).toString(),
-                  child: Text(e['user']?['name'] ?? e['name'] ?? "Unknown"),
-                )).toList(),
+                items: _employees
+                    .map(
+                      (e) => DropdownMenuItem(
+                        value: (e['user_id'] ?? e['id']).toString(),
+                        child: Text(
+                          e['user']?['name'] ?? e['name'] ?? "Unknown",
+                        ),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (v) => setState(() => _assigneeId = v),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: _priority,
                 decoration: const InputDecoration(labelText: "Priority"),
-                items: ['low', 'medium', 'high', 'urgent'].map((p) => DropdownMenuItem(value: p, child: Text(p.toUpperCase()))).toList(),
+                items: ['low', 'medium', 'high', 'urgent']
+                    .map(
+                      (p) => DropdownMenuItem(
+                        value: p,
+                        child: Text(p.toUpperCase()),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (v) => setState(() => _priority = v!),
               ),
               const SizedBox(height: 12),
@@ -639,13 +923,40 @@ class _TaskActionDialogState extends State<_TaskActionDialog> {
                 decoration: const InputDecoration(labelText: "Description"),
                 maxLines: 3,
               ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _dueDate,
+                    firstDate: DateTime.now().subtract(
+                      const Duration(days: 365),
+                    ),
+                    lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                  );
+                  if (picked != null) setState(() => _dueDate = picked);
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: "Due Date",
+                    prefixIcon: Icon(Icons.calendar_today_rounded, size: 20),
+                  ),
+                  child: Text(DateFormat('yyyy-MM-dd').format(_dueDate)),
+                ),
+              ),
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-        ElevatedButton(onPressed: _isSaving ? null : _save, child: Text(_isSaving ? "Saving..." : "Save")),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _save,
+          child: Text(_isSaving ? "Saving..." : "Save"),
+        ),
       ],
     );
   }
@@ -669,7 +980,9 @@ class _TaskActionDialogState extends State<_TaskActionDialog> {
       widget.onSuccess();
       Navigator.pop(context);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? "Error")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(res['message'] ?? "Error")));
     }
     setState(() => _isSaving = false);
   }

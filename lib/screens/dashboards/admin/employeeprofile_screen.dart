@@ -722,21 +722,22 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                 bottomRight: Radius.circular(20),
               ),
             ),
-            // child: Row(
-            //   mainAxisAlignment: MainAxisAlignment.end,
-            //   children: [
-            //     _buildActionButton(Icons.visibility_outlined, "View", () {}),
-            //     const SizedBox(width: 10),
-            //     _buildActionButton(Icons.edit_outlined, "Edit", () {}),
-            //     const SizedBox(width: 10),
-            //     _buildActionButton(
-            //       Icons.delete_outline_rounded,
-            //       "Delete",
-            //       () {},
-            //       color: AppColors.error,
-            //     ),
-            //   ],
-            // ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _buildActionButton(
+                  Icons.visibility_outlined,
+                  "View",
+                  () => _showEmployeeDetails(employee),
+                ),
+                const SizedBox(width: 10),
+                _buildActionButton(
+                  Icons.edit_outlined,
+                  "Edit",
+                  () {}, // Future implementation
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -793,17 +794,267 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Active':
-        return AppColors.success;
-      case 'On Hold':
-        return AppColors.warning;
-      case 'Terminate':
-      case 'Resigned':
-        return AppColors.error;
-      default:
-        return AppColors.grey600;
+  void _showEmployeeDetails(Map<String, dynamic> employee) {
+    final String firstName = employee['first_name']?.toString() ?? '';
+    final String lastName = employee['last_name']?.toString() ?? '';
+    final String nameStr = firstName.isNotEmpty
+        ? '$firstName $lastName'.trim()
+        : (employee['name']?.toString() ?? 'Unknown');
+    final String idStr =
+        employee['employee_id']?.toString() ??
+        employee['id']?.toString() ??
+        'N/A';
+
+    String deptName = 'Unknown Dept';
+    if (employee['department'] is Map) {
+      deptName = employee['department']['name']?.toString() ?? 'Unknown Dept';
+    } else if (employee['department_name'] != null) {
+      deptName = employee['department_name'].toString();
+    } else if (employee['dept'] != null) {
+      deptName = employee['dept'].toString();
     }
+
+    final String statusStr = employee['status']?.toString() ?? 'Active';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Employee Details',
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: AppColors.grey400,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: AppColors.gold.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          nameStr.isNotEmpty ? nameStr[0].toUpperCase() : 'E',
+                          style: GoogleFonts.inter(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.goldDark,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      nameStr,
+                      style: GoogleFonts.inter(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(statusStr).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        statusStr,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: _getStatusColor(statusStr),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildDetailRow(
+                            Icons.badge_outlined,
+                            'Employee ID',
+                            idStr,
+                          ),
+                          const Divider(
+                            height: 24,
+                            thickness: 1,
+                            color: AppColors.offWhite,
+                          ),
+                          _buildDetailRow(
+                            Icons.work_outline_rounded,
+                            'Department',
+                            deptName,
+                          ),
+                          const Divider(
+                            height: 24,
+                            thickness: 1,
+                            color: AppColors.offWhite,
+                          ),
+                          ...employee.entries
+                              .where((e) {
+                                final kStr = e.key.toLowerCase();
+                                if ([
+                                  'id',
+                                  'employee_id',
+                                  'name',
+                                  'first_name',
+                                  'last_name',
+                                  'status',
+                                  'created_at',
+                                  'updated_at',
+                                  'deleted_at',
+                                  'department',
+                                  'department_name',
+                                  'dept',
+                                  'user_type',
+                                  'role',
+                                ].contains(kStr))
+                                  return false;
+                                if (e.value == null ||
+                                    e.value.toString().trim().isEmpty ||
+                                    e.value.toString() == 'null')
+                                  return false;
+                                if (e.value is Map || e.value is List)
+                                  return false;
+                                return true;
+                              })
+                              .map((e) {
+                                String formatLabel(String key) {
+                                  return key
+                                      .replaceAll('_', ' ')
+                                      .split(' ')
+                                      .map((word) {
+                                        if (word.isEmpty) return '';
+                                        return word[0].toUpperCase() +
+                                            word.substring(1).toLowerCase();
+                                      })
+                                      .join(' ');
+                                }
+
+                                String formatValue(dynamic val) {
+                                  String vStr = val.toString();
+                                  if (vStr.contains('T') &&
+                                      vStr.length >= 19 &&
+                                      DateTime.tryParse(vStr) != null) {
+                                    return vStr.split('T').first;
+                                  }
+                                  return vStr;
+                                }
+
+                                return Column(
+                                  children: [
+                                    _buildDetailRow(
+                                      Icons.info_outline_rounded,
+                                      formatLabel(e.key),
+                                      formatValue(e.value),
+                                    ),
+                                    const Divider(
+                                      height: 24,
+                                      thickness: 1,
+                                      color: AppColors.offWhite,
+                                    ),
+                                  ],
+                                );
+                              }),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.offWhite,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.navy),
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.grey400,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.navy,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    final s = status.toLowerCase();
+    if (s.contains('active')) return AppColors.success;
+    if (s.contains('hold')) return AppColors.warning;
+    if (s.contains('terminate') || s.contains('resigned')) {
+      return AppColors.error;
+    }
+    return AppColors.grey600;
   }
 }
