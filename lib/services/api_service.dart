@@ -800,7 +800,7 @@ class ApiService {
       final headers = await _headers();
       final response = await http
           .get(
-            Uri.parse('$baseUrl/manager/manager-leave-requests'),
+            Uri.parse('$baseUrl/admin/manager/leave-requests'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
@@ -809,7 +809,7 @@ class ApiService {
         return {'error': false, 'data': _extractList(data)};
       return {
         'error': true,
-        'message': data['message'] ?? 'Failed to load admin manager leaves',
+        'message': data['message'] ?? 'Failed to load manager leaves',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -836,7 +836,7 @@ class ApiService {
       });
       final response = await http
           .post(
-            Uri.parse('$baseUrl/manager/manager-leave-requests/$id/approve'),
+            Uri.parse('$baseUrl/admin/manager/leave-requests/$id/approve'),
             headers: headers,
             body: body,
           )
@@ -923,7 +923,7 @@ class ApiService {
       final headers = await _headers();
       final response = await http
           .get(
-            Uri.parse('$baseUrl/employee/admin-leave-requests'),
+            Uri.parse('$baseUrl/admin/employee/leave-requests'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
@@ -932,7 +932,7 @@ class ApiService {
         return {'error': false, 'data': _extractList(data)};
       return {
         'error': true,
-        'message': data['message'] ?? 'Failed to load admin leaves',
+        'message': data['message'] ?? 'Failed to load employee leaves',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -959,7 +959,7 @@ class ApiService {
       });
       final response = await http
           .post(
-            Uri.parse('$baseUrl/employee/leave-requests/$id/approve'),
+            Uri.parse('$baseUrl/admin/employee/leave-requests/$id/approve'),
             headers: headers,
             body: body,
           )
@@ -1390,7 +1390,27 @@ class ApiService {
     }
   }
 
-  // Removed duplicate updateAdminOfficialLeave call as it's now integrated above
+  static Future<Map<String, dynamic>> getAdminOfficialLeaveById(
+    dynamic id,
+  ) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/admin/official-leaves/$id'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': data};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load official leave details',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
 
   static Future<Map<String, dynamic>> deleteAdminOfficialLeave(
     dynamic id,
@@ -1424,6 +1444,28 @@ class ApiService {
       return {
         'error': true,
         'message': data['message'] ?? 'Failed to load official leaves',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getManagerOfficialLeaveById(
+    dynamic id,
+  ) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/manager/official-leaves/$id'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': data};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load official leave details',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -1540,6 +1582,28 @@ class ApiService {
       return {
         'error': true,
         'message': data['message'] ?? 'Failed to load official leaves',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getEmployeeOfficialLeaveById(
+    dynamic id,
+  ) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/employee/official-leaves/$id'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, 'data': data};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load holiday details',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -1991,7 +2055,7 @@ class ApiService {
   }) async {
     try {
       final headers = await _headers();
-      var uri = Uri.parse('$baseUrl/manager/tasks');
+      var uri = Uri.parse('$baseUrl/tasks');
       if (queryParams != null && queryParams.isNotEmpty) {
         uri = uri.replace(
           queryParameters: queryParams.map((k, v) => MapEntry(k, v.toString())),
@@ -2020,10 +2084,7 @@ class ApiService {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
 
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl/manager/tasks'),
-      );
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/tasks'));
       request.headers.addAll({
         'Accept': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
@@ -2069,7 +2130,7 @@ class ApiService {
             headers: headers,
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) return {'error': false, ...data};
       return {'error': true, 'message': _extractErrorMessage(data)};
@@ -2114,9 +2175,9 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> createEmployeeTask(
-    Map<String, dynamic> body, {
+    Map<String, dynamic> body,
     List<File>? attachments,
-  }) async {
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
@@ -2134,7 +2195,7 @@ class ApiService {
         request.fields[key] = value.toString();
       });
 
-      if (attachments != null && attachments.isNotEmpty) {
+      if (attachments != null) {
         for (var file in attachments) {
           request.files.add(
             await http.MultipartFile.fromPath('attachments[]', file.path),
@@ -2142,15 +2203,14 @@ class ApiService {
         }
       }
 
-      final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 30),
+      final streamedRes = await request.send().timeout(
+        const Duration(seconds: 60),
       );
-      final response = await http.Response.fromStream(streamedResponse);
+      final response = await http.Response.fromStream(streamedRes);
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.statusCode == 200 || response.statusCode == 201)
         return {'error': false, ...data};
-      }
       return {'error': true, 'message': _extractErrorMessage(data)};
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -2169,7 +2229,7 @@ class ApiService {
             headers: headers,
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) return {'error': false, ...data};
       return {'error': true, 'message': _extractErrorMessage(data)};
@@ -2213,26 +2273,25 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> updateTaskStatus(
+  static Future<Map<String, dynamic>> updateEmployeeTaskStatus(
     dynamic id,
-    String status, {
-    String? liveLink,
-  }) async {
+    String status,
+  ) async {
     try {
       final headers = await _headers();
       final response = await http
           .patch(
             Uri.parse('$baseUrl/employee/tasks/$id/status'),
             headers: headers,
-            body: jsonEncode({
-              'status': status,
-              if (liveLink != null) 'live_link': liveLink,
-            }),
+            body: jsonEncode({'status': status}),
           )
           .timeout(const Duration(seconds: 10));
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) return {'error': false, ...data};
-      return {'error': true, 'message': _extractErrorMessage(data)};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to update status',
+      };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
     }
@@ -2697,6 +2756,33 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getAdminManagerSalaries({
+    int? month,
+    int? year,
+  }) async {
+    try {
+      final headers = await _headers();
+      String url = '$baseUrl/admin/manager-salary';
+      List<String> params = [];
+      if (month != null) params.add('month=$month');
+      if (year != null) params.add('year=$year');
+      if (params.isNotEmpty) url += '?' + params.join('&');
+
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200)
+        return {'error': false, 'data': data['data'] ?? data};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load manager salaries',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
   static Future<Map<String, dynamic>> generateAdminSalaries(
     int month,
     int year,
@@ -2716,6 +2802,31 @@ class ApiService {
       return {
         'error': true,
         'message': data['message'] ?? 'Failed to generate salaries',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> generateAdminManagerSalaries(
+    int month,
+    int year,
+  ) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/admin/manager-salary/generate'),
+            headers: headers,
+            body: jsonEncode({'month': month, 'year': year}),
+          )
+          .timeout(const Duration(seconds: 30));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201)
+        return {'error': false, ...data};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to generate manager salaries',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -2764,6 +2875,30 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> markManagerMonthAsFullyPaid(
+    int month,
+    int year,
+  ) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/admin/manager-salary/mark-paid'),
+            headers: headers,
+            body: jsonEncode({'month': month, 'year': year}),
+          )
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'error': false, ...data};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to mark manager month as paid',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
   static Future<Map<String, dynamic>> markMonthAsFullyPaid(
     int month,
     int year,
@@ -2802,6 +2937,25 @@ class ApiService {
       return {
         'error': true,
         'message': data['message'] ?? 'Failed to load salary history',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getManagerSalaries() async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/salary'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'error': false, 'data': _extractList(data)};
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load manager salary history',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -3029,8 +3183,35 @@ class ApiService {
     if (data is List) return data;
     if (data is Map) {
       if (data['data'] is List) return data['data'];
-      if (data['data'] is Map && data['data']['data'] is List)
+      if (data['data'] is Map && data['data']['data'] is List) {
         return data['data']['data'];
+      }
+      if (data['tasks'] is List) return data['tasks'];
+      if (data['leaves'] is List) return data['leaves'];
+      if (data['manager_leaves'] is List) return data['manager_leaves'];
+      if (data['employee_leaves'] is List) return data['employee_leaves'];
+      if (data['manager_leave_requests'] is List)
+        return data['manager_leave_requests'];
+      if (data['employee_leave_requests'] is List)
+        return data['employee_leave_requests'];
+      if (data['applied_leaves'] is List) return data['applied_leaves'];
+      if (data['leave_requests'] is List) return data['leave_requests'];
+      if (data['all_leaves'] is List) return data['all_leaves'];
+      if (data['items'] is List) return data['items'];
+      if (data['requests'] is List) return data['requests'];
+
+      if (data['data'] is Map) {
+        final d = data['data'];
+        if (d['tasks'] is List) return d['tasks'];
+        if (d['leaves'] is List) return d['leaves'];
+        if (d['manager_leaves'] is List) return d['manager_leaves'];
+        if (d['employee_leaves'] is List) return d['employee_leaves'];
+        if (d['all_leaves'] is List) return d['all_leaves'];
+        if (d['items'] is List) return d['items'];
+        if (d['data'] is List) return d['data'];
+      }
+
+      if (data['data'] is List) return data['data'];
       // Fallback: look for first list in entries
       for (var entry in data.entries) {
         if (entry.value is List) return entry.value;

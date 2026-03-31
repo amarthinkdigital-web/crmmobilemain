@@ -22,11 +22,25 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
 
   Future<void> _fetchLeaves() async {
     setState(() => _isLoading = true);
-    final res = await ApiService.getAllEmployeeLeaveRequests();
+    final res = await ApiService.getAdminEmployeeLeaveRequests();
     if (!mounted) return;
     if (res['error'] == false) {
+      final data = res['data'];
+      List<Map<String, dynamic>> items = [];
+      if (data is List) {
+        items = data.cast<Map<String, dynamic>>();
+      } else if (data is Map) {
+        // Fallback for nested lists if _extractList didn't flatten enough
+        for (var entry in data.entries) {
+          if (entry.value is List) {
+            items = entry.value.cast<Map<String, dynamic>>();
+            break;
+          }
+        }
+      }
+
       setState(() {
-        _leaveRequests = (res['data'] as List).cast<Map<String, dynamic>>();
+        _leaveRequests = items;
         _isLoading = false;
       });
     } else {
@@ -37,13 +51,23 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
     }
   }
 
-  Future<void> _updateStatus(int id, String status, String leaveType, {String? reason}) async {
-    final res = await ApiService.setEmployeeLeaveStatus(id, status, leaveType: leaveType, reason: reason);
+  Future<void> _updateStatus(
+    int id,
+    String status,
+    String leaveType, {
+    String? reason,
+  }) async {
+    final res = await ApiService.setEmployeeLeaveStatus(
+      id,
+      status,
+      leaveType: leaveType,
+      reason: reason,
+    );
     if (!mounted) return;
     if (res['error'] == false) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Leave updated to $status')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Leave updated to $status')));
       _fetchLeaves();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -52,17 +76,41 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
     }
   }
 
-  int _getId(dynamic req) => req['id'] ?? 0;
-  String _getName(dynamic req) => req['employee']?['name'] ?? req['user']?['name'] ?? 'Unknown';
-  String _getRole(dynamic req) => req['employee']?['department']?['name'] ?? req['user']?['role'] ?? 'Staff';
-  String _getStart(dynamic req) => req['start_date']?.toString() ?? '-';
-  String _getEnd(dynamic req) => req['end_date']?.toString() ?? '-';
-  String _getType(dynamic req) => req['leave_type'] ?? req['type'] ?? 'Leave';
-  String _getStatus(dynamic req) => req['status'] ?? 'Pending';
-  String _getReason(dynamic req) => req['reason'] ?? 'No reason provided';
+  int _getId(dynamic req) => req['id'] ?? req['leave_id'] ?? 0;
+  String _getName(dynamic req) {
+    final e = req['employee'] ?? req['user'] ?? req['staff'];
+    if (e is Map) {
+      return e['name'] ?? e['user_name'] ?? e['first_name'] ?? 'Unknown';
+    }
+    return e?.toString() ?? req['employee_name'] ?? 'Unknown';
+  }
+
+  String _getRole(dynamic req) {
+    final e = req['employee'] ?? req['user'] ?? req['staff'];
+    if (e is Map) {
+      final dept = e['department'];
+      if (dept is Map) return dept['name'] ?? 'Staff';
+      return e['role'] ?? e['designation'] ?? 'Staff';
+    }
+    return req['department_name'] ?? 'Staff';
+  }
+
+  String _getStart(dynamic req) =>
+      req['start_date']?.toString() ?? req['from_date']?.toString() ?? '-';
+  String _getEnd(dynamic req) =>
+      req['end_date']?.toString() ?? req['to_date']?.toString() ?? '-';
+  String _getType(dynamic req) =>
+      req['leave_type'] ?? req['type'] ?? req['category'] ?? 'Leave';
+  String _getStatus(dynamic req) => req['status']?.toString() ?? 'Pending';
+  String _getReason(dynamic req) =>
+      req['reason'] ?? req['description'] ?? 'No reason provided';
 
   bool _hasPaidLeaveThisMonth(Map<String, dynamic> req) {
-    final userId = req['employee']?['id'] ?? req['user']?['id'] ?? req['user_id'] ?? req['employee_id'];
+    final userId =
+        req['employee']?['id'] ??
+        req['user']?['id'] ??
+        req['user_id'] ??
+        req['employee_id'];
     if (userId == null) return false;
 
     final startDateStr = req['start_date']?.toString();
@@ -77,7 +125,11 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
         // Skip current request if it's already in the list
         if (r['id'] == req['id']) continue;
 
-        final rUserId = r['employee']?['id'] ?? r['user']?['id'] ?? r['user_id'] ?? r['employee_id'];
+        final rUserId =
+            r['employee']?['id'] ??
+            r['user']?['id'] ??
+            r['user_id'] ??
+            r['employee_id'];
         if (rUserId != userId) continue;
 
         final status = (r['status'] ?? '').toString().toLowerCase();
@@ -263,9 +315,7 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
             style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600),
           ),
         ),
-        DataCell(
-          Text(_getStart(req), style: GoogleFonts.inter(fontSize: 12)),
-        ),
+        DataCell(Text(_getStart(req), style: GoogleFonts.inter(fontSize: 12))),
         DataCell(Text(_getEnd(req), style: GoogleFonts.inter(fontSize: 12))),
         DataCell(
           Container(
@@ -296,31 +346,39 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
           ),
         ),
         DataCell(
-          _getStatus(req).toLowerCase() == 'pending' 
-          ? Row(
-            children: [
-              if (!_hasPaidLeaveThisMonth(req)) ...[
-                _buildCompactActionButton(
-                  "Paid", 
-                  AppColors.success, 
-                  () => _updateStatus(_getId(req), 'Approved Paid', _getType(req)),
-                ),
-                const SizedBox(width: 8),
-              ],
-              _buildCompactActionButton(
-                "Unpaid", 
-                AppColors.warning, 
-                () => _updateStatus(_getId(req), 'Approved Unpaid', _getType(req)),
-              ),
-              const SizedBox(width: 8),
-              _buildCompactActionButton(
-                "Reject", 
-                AppColors.error, 
-                () => _showRejectDialog(_getId(req), _getType(req)),
-              ),
-            ],
-          )
-          : const SizedBox.shrink(),
+          _getStatus(req).toLowerCase() == 'pending'
+              ? Row(
+                  children: [
+                    if (!_hasPaidLeaveThisMonth(req)) ...[
+                      _buildCompactActionButton(
+                        "Paid",
+                        AppColors.success,
+                        () => _updateStatus(
+                          _getId(req),
+                          'Approved Paid',
+                          _getType(req),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    _buildCompactActionButton(
+                      "Unpaid",
+                      AppColors.warning,
+                      () => _updateStatus(
+                        _getId(req),
+                        'Approved Unpaid',
+                        _getType(req),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildCompactActionButton(
+                      "Reject",
+                      AppColors.error,
+                      () => _showRejectDialog(_getId(req), _getType(req)),
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );
@@ -371,12 +429,20 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Close", style: TextStyle(color: AppColors.grey600)),
+            child: const Text(
+              "Close",
+              style: TextStyle(color: AppColors.grey600),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _updateStatus(id, 'Rejected', leaveType, reason: reasonController.text);
+              _updateStatus(
+                id,
+                'Rejected',
+                leaveType,
+                reason: reasonController.text,
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,

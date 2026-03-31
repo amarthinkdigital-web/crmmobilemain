@@ -25,8 +25,20 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
     final res = await ApiService.getAdminManagerLeaveRequests();
     if (!mounted) return;
     if (res['error'] == false) {
+      final data = res['data'];
+      List<Map<String, dynamic>> items = [];
+      if (data is List) {
+        items = data.cast<Map<String, dynamic>>();
+      } else if (data is Map) {
+        for (var entry in data.entries) {
+          if (entry.value is List) {
+            items = entry.value.cast<Map<String, dynamic>>();
+            break;
+          }
+        }
+      }
       setState(() {
-        _leaveRequests = (res['data'] as List).cast<Map<String, dynamic>>();
+        _leaveRequests = items;
         _isLoading = false;
       });
     } else {
@@ -37,13 +49,23 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
     }
   }
 
-  Future<void> _updateStatus(int id, String status, String leaveType, {String? reason}) async {
-    final res = await ApiService.setAdminManagerLeaveStatus(id, status, leaveType: leaveType, reason: reason);
+  Future<void> _updateStatus(
+    int id,
+    String status,
+    String leaveType, {
+    String? reason,
+  }) async {
+    final res = await ApiService.setAdminManagerLeaveStatus(
+      id,
+      status,
+      leaveType: leaveType,
+      reason: reason,
+    );
     if (!mounted) return;
     if (res['error'] == false) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Leave updated to $status')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Leave updated to $status')));
       _fetchLeaves();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -52,17 +74,36 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
     }
   }
 
-  int _getId(dynamic req) => req['id'] ?? 0;
-  String _getName(dynamic req) => req['team_leader']?['name'] ?? req['manager']?['name'] ?? req['user']?['name'] ?? 'Unknown';
-  String _getStart(dynamic req) => req['start_date']?.toString() ?? '-';
-  String _getEnd(dynamic req) => req['end_date']?.toString() ?? '-';
-  String _getType(dynamic req) => req['leave_type'] ?? req['type'] ?? 'Leave';
-  String _getStatus(dynamic req) => req['status'] ?? 'Pending';
-  String _getReason(dynamic req) => req['reason'] ?? 'No reason provided';
+  int _getId(dynamic req) => req['id'] ?? req['leave_id'] ?? 0;
+  String _getName(dynamic req) {
+    final e = req['team_leader'] ?? req['manager'] ?? req['user'];
+    if (e is Map) {
+      return e['name'] ?? e['user_name'] ?? e['first_name'] ?? 'Unknown';
+    }
+    return e?.toString() ??
+        req['manager_name'] ??
+        req['user_name'] ??
+        'Unknown';
+  }
+
+  String _getStart(dynamic req) =>
+      req['start_date']?.toString() ?? req['from_date']?.toString() ?? '-';
+  String _getEnd(dynamic req) =>
+      req['end_date']?.toString() ?? req['to_date']?.toString() ?? '-';
+  String _getType(dynamic req) =>
+      req['leave_type'] ?? req['type'] ?? req['category'] ?? 'Leave';
+  String _getStatus(dynamic req) => req['status']?.toString() ?? 'Pending';
+  String _getReason(dynamic req) =>
+      req['reason'] ?? req['description'] ?? 'No reason provided';
 
   bool _hasPaidLeaveThisMonth(Map<String, dynamic> req) {
     // For manager leaves, the requester is the manager/team_leader
-    final userId = req['team_leader']?['id'] ?? req['manager']?['id'] ?? req['user']?['id'] ?? req['user_id'] ?? req['manager_id'];
+    final userId =
+        req['team_leader']?['id'] ??
+        req['manager']?['id'] ??
+        req['user']?['id'] ??
+        req['user_id'] ??
+        req['manager_id'];
     if (userId == null) return false;
 
     final startDateStr = req['start_date']?.toString();
@@ -76,7 +117,12 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
       for (var r in _leaveRequests) {
         if (r['id'] == req['id']) continue;
 
-        final rUserId = r['team_leader']?['id'] ?? r['manager']?['id'] ?? r['user']?['id'] ?? r['user_id'] ?? r['manager_id'];
+        final rUserId =
+            r['team_leader']?['id'] ??
+            r['manager']?['id'] ??
+            r['user']?['id'] ??
+            r['user_id'] ??
+            r['manager_id'];
         if (rUserId != userId) continue;
 
         final status = (r['status'] ?? '').toString().toLowerCase();
@@ -255,9 +301,7 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
             ),
           ),
         ),
-        DataCell(
-          Text(_getStart(req), style: GoogleFonts.inter(fontSize: 12)),
-        ),
+        DataCell(Text(_getStart(req), style: GoogleFonts.inter(fontSize: 12))),
         DataCell(Text(_getEnd(req), style: GoogleFonts.inter(fontSize: 12))),
         DataCell(
           Container(
@@ -299,30 +343,38 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
         ),
         DataCell(
           _getStatus(req).toLowerCase() == 'pending'
-          ? Row(
-            children: [
-              if (!_hasPaidLeaveThisMonth(req)) ...[
-                _buildCompactActionButton(
-                  "Paid",
-                  AppColors.success,
-                  () => _updateStatus(_getId(req), 'Approved Paid', _getType(req)),
-                ),
-                const SizedBox(width: 8),
-              ],
-              _buildCompactActionButton(
-                "Unpaid",
-                AppColors.warning,
-                () => _updateStatus(_getId(req), 'Approved Unpaid', _getType(req)),
-              ),
-              const SizedBox(width: 8),
-              _buildCompactActionButton(
-                "Reject",
-                AppColors.error,
-                () => _showRejectDialog(_getId(req), _getType(req)),
-              ),
-            ],
-          )
-          : const SizedBox.shrink(),
+              ? Row(
+                  children: [
+                    if (!_hasPaidLeaveThisMonth(req)) ...[
+                      _buildCompactActionButton(
+                        "Paid",
+                        AppColors.success,
+                        () => _updateStatus(
+                          _getId(req),
+                          'Approved Paid',
+                          _getType(req),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    _buildCompactActionButton(
+                      "Unpaid",
+                      AppColors.warning,
+                      () => _updateStatus(
+                        _getId(req),
+                        'Approved Unpaid',
+                        _getType(req),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildCompactActionButton(
+                      "Reject",
+                      AppColors.error,
+                      () => _showRejectDialog(_getId(req), _getType(req)),
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );
@@ -398,12 +450,20 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Close", style: TextStyle(color: AppColors.grey600)),
+            child: const Text(
+              "Close",
+              style: TextStyle(color: AppColors.grey600),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _updateStatus(id, 'Rejected', leaveType, reason: reasonController.text);
+              _updateStatus(
+                id,
+                'Rejected',
+                leaveType,
+                reason: reasonController.text,
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../theme/app_theme.dart';
+import '../../../services/api_service.dart';
 
 class ManagerLeaveRequestScreen extends StatefulWidget {
   const ManagerLeaveRequestScreen({super.key});
@@ -12,37 +13,74 @@ class ManagerLeaveRequestScreen extends StatefulWidget {
 }
 
 class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
-  final List<Map<String, dynamic>> _leaveApplications = [
-    {
-      'srNo': 1,
-      'startDate': '2026-03-20',
-      'endDate': '2026-03-22',
-      'type': 'Vacation',
-      'status': 'Pending',
-      'reason': 'Family trip out of town',
-    },
-    {
-      'srNo': 2,
-      'startDate': '2026-02-14',
-      'endDate': '2026-02-14',
-      'type': 'Casual Leave',
-      'status': 'Approved',
-      'reason': 'Personal errands',
-    },
-    {
-      'srNo': 3,
-      'startDate': '2026-01-22',
-      'endDate': '2026-01-24',
-      'type': 'Sick Leave',
-      'status': 'Approved',
-      'reason': 'Viral fever recovery',
-    },
-  ];
+  List<Map<String, dynamic>> _leaveApplications = [];
+  bool _isLoading = true;
 
   final TextEditingController startDateController = TextEditingController();
   final TextEditingController endDateController = TextEditingController();
   final TextEditingController reasonController = TextEditingController();
-  String selectedType = 'Sick Leave';
+  String selectedType = 'Paid Leave';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMyLeaves();
+  }
+
+  Future<void> _fetchMyLeaves() async {
+    setState(() => _isLoading = true);
+    final res = await ApiService.getManagerLeaves();
+    if (!mounted) return;
+    if (res['error'] == false) {
+      setState(() {
+        _leaveApplications = List<Map<String, dynamic>>.from(res['data'] ?? []);
+        _isLoading = false;
+      });
+    } else {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _submitLeave() async {
+    if (startDateController.text.isEmpty ||
+        endDateController.text.isEmpty ||
+        reasonController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill all required fields')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    // Backend expects 'paid' or 'unpaid'
+    final leaveTypeValue = selectedType.split(' ').first.toLowerCase();
+
+    final payload = {
+      'leave_type': leaveTypeValue,
+      'type': leaveTypeValue,
+      'start_date': startDateController.text,
+      'end_date': endDateController.text,
+      'reason': reasonController.text,
+    };
+
+    final res = await ApiService.submitManagerLeave(payload);
+    if (!mounted) return;
+
+    if (res['error'] == false) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Leave request submitted successfully!')),
+      );
+      _clearControllers();
+      _fetchMyLeaves();
+    } else {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Failed to submit leave request'),
+        ),
+      );
+    }
+  }
 
   void _showAddLeaveSheet() {
     showModalBottomSheet(
@@ -150,33 +188,29 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _leaveApplications.insert(0, {
-                        "srNo": _leaveApplications.length + 1,
-                        "startDate": startDateController.text,
-                        "endDate": endDateController.text,
-                        "type": selectedType,
-                        "status": "Pending",
-                        "reason": reasonController.text,
-                      });
-                    });
-                    _clearControllers();
-                    Navigator.pop(context);
-                  },
+                  onPressed: _isLoading ? null : _submitLeave,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.navy,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15),
                     ),
                   ),
-                  child: Text(
-                    "Submit Application",
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(
+                          "Submit Application",
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(height: 32),
@@ -191,7 +225,7 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
     startDateController.clear();
     endDateController.clear();
     reasonController.clear();
-    selectedType = 'Sick Leave';
+    selectedType = 'Paid Leave';
   }
 
   Widget _buildInputField(
@@ -261,10 +295,8 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
               value: selectedType,
               isExpanded: true,
               items: [
-                "Sick Leave",
-                "Casual Leave",
-                "Vacation",
-                "Emergency Leave",
+                "Paid Leave",
+                "Unpaid Leave",
               ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
               onChanged: (v) => setState(() => selectedType = v!),
             ),
@@ -278,18 +310,22 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 24),
-            _buildLeavesTable(),
-            const SizedBox(height: 100),
-          ],
-        ),
-      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.navy),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 24),
+                  _buildLeavesTable(),
+                  const SizedBox(height: 100),
+                ],
+              ),
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddLeaveSheet,
         backgroundColor: AppColors.navy,
@@ -396,14 +432,24 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
   }
 
   DataRow _buildRow(Map<String, dynamic> l) {
+    String start =
+        l['start_date']?.toString() ?? l['startDate']?.toString() ?? '-';
+    String end = l['end_date']?.toString() ?? l['endDate']?.toString() ?? '-';
+    String type = l['leave_type'] ?? l['type'] ?? l['category'] ?? 'Leave';
+    String status = l['status']?.toString() ?? 'Pending';
+    String reason = l['reason'] ?? l['description'] ?? 'No reason provided';
+
     return DataRow(
       cells: [
         DataCell(
-          Text(l['srNo'].toString(), style: GoogleFonts.inter(fontSize: 12)),
+          Text(
+            l['srNo']?.toString() ?? (l['id'] ?? '').toString(),
+            style: GoogleFonts.inter(fontSize: 12),
+          ),
         ),
         DataCell(
           Text(
-            l['startDate'],
+            start,
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -413,7 +459,7 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
         ),
         DataCell(
           Text(
-            l['endDate'],
+            end,
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -421,13 +467,13 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
             ),
           ),
         ),
-        DataCell(_buildTypeBadge(l['type'])),
-        DataCell(_buildStatusBadge(l['status'])),
+        DataCell(_buildTypeBadge(type)),
+        DataCell(_buildStatusBadge(status)),
         DataCell(
           SizedBox(
             width: 150,
             child: Text(
-              l['reason'],
+              reason,
               style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600),
               overflow: TextOverflow.ellipsis,
             ),
@@ -441,7 +487,7 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
                 AppColors.info,
                 "View",
               ),
-              if (l['status'] == 'Pending') ...[
+              if (status == 'Pending') ...[
                 const SizedBox(width: 8),
                 _buildActionIcon(
                   Icons.edit_outlined,

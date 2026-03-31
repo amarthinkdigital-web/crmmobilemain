@@ -15,6 +15,7 @@ class PayrollManagementScreen extends StatefulWidget {
 class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
   String selectedMonth = DateTime.now().month.toString();
   String selectedYear = DateTime.now().year.toString();
+  bool _isManagerMode = false;
 
   final List<Map<String, String>> months = [
     {"id": "1", "name": "January"},
@@ -48,10 +49,15 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
       _errorMessage = null;
     });
 
-    final response = await ApiService.getAdminSalaries(
-      month: int.tryParse(selectedMonth),
-      year: int.tryParse(selectedYear),
-    );
+    final response = _isManagerMode
+        ? await ApiService.getAdminManagerSalaries(
+            month: int.tryParse(selectedMonth),
+            year: int.tryParse(selectedYear),
+          )
+        : await ApiService.getAdminSalaries(
+            month: int.tryParse(selectedMonth),
+            year: int.tryParse(selectedYear),
+          );
 
     if (response['error'] == false) {
       final List data = (response['data'] is Map)
@@ -71,10 +77,15 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
 
   Future<void> _generateSalaries() async {
     _showLoadingDialog("Generating salaries...");
-    final response = await ApiService.generateAdminSalaries(
-      int.parse(selectedMonth),
-      int.parse(selectedYear),
-    );
+    final response = _isManagerMode
+        ? await ApiService.generateAdminManagerSalaries(
+            int.parse(selectedMonth),
+            int.parse(selectedYear),
+          )
+        : await ApiService.generateAdminSalaries(
+            int.parse(selectedMonth),
+            int.parse(selectedYear),
+          );
     Navigator.pop(context);
 
     if (response['error'] == false) {
@@ -140,10 +151,15 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
 
     if (confirmed == true) {
       _showLoadingDialog("Processing bulk payment...");
-      final response = await ApiService.markMonthAsFullyPaid(
-        int.parse(selectedMonth),
-        int.parse(selectedYear),
-      );
+      final response = _isManagerMode
+          ? await ApiService.markManagerMonthAsFullyPaid(
+              int.parse(selectedMonth),
+              int.parse(selectedYear),
+            )
+          : await ApiService.markMonthAsFullyPaid(
+              int.parse(selectedMonth),
+              int.parse(selectedYear),
+            );
       Navigator.pop(context);
 
       if (response['error'] == false) {
@@ -263,6 +279,38 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
   Widget _buildFilterSection() {
     return Column(
       children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.grey100,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildToggleButton(
+                  "Employees",
+                  !_isManagerMode,
+                  () => setState(() {
+                    _isManagerMode = false;
+                    _fetchSalaries();
+                  }),
+                ),
+              ),
+              Expanded(
+                child: _buildToggleButton(
+                  "Managers",
+                  _isManagerMode,
+                  () => setState(() {
+                    _isManagerMode = true;
+                    _fetchSalaries();
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
@@ -692,8 +740,8 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
   }
 
   Widget _buildStatTile(
-    String label,
-    String value,
+    String title,
+    String count,
     IconData icon,
     Color color,
   ) {
@@ -713,46 +761,80 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(height: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                value,
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.navy,
-                  letterSpacing: -0.5,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                child: Icon(icon, color: color, size: 20),
               ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.grey400,
-                  letterSpacing: 0.1,
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    count,
+                    style: GoogleFonts.inter(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          Flexible(
+            child: Text(
+              title,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.grey600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildToggleButton(String label, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+              color: isSelected ? AppColors.navy : AppColors.grey600,
+            ),
+          ),
+        ),
       ),
     );
   }
