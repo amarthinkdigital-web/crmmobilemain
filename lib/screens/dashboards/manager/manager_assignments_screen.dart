@@ -87,9 +87,15 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
       // Normal mode: All manager assignments
       final response = await ApiService.getManagerTasks();
       if (response['error'] == false) {
-        final List rawTasks = response['data'] ?? [];
+        final List raw = response['data'] ?? [];
         setState(() {
-          _tasks = rawTasks.map((i) => _mapTask(i)).toList();
+          _tasks = raw
+              .asMap()
+              .entries
+              .map(
+                (e) => _mapTask(e.value, category: 'TASKS', index: e.key + 1),
+              )
+              .toList();
           _isLoading = false;
         });
       } else {
@@ -98,18 +104,67 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
     }
   }
 
-  Map<String, dynamic> _mapTask(Map<String, dynamic> i, {String? category}) {
+  Map<String, dynamic> _mapTask(
+    Map<String, dynamic> i, {
+    String category = 'TASKS',
+    int index = 1,
+  }) {
+    // Robust mapping for assigner/giver
+    final giverData = i['assigner'] ?? i['assigned_by_user'] ?? i['giver'];
+    String giverName = 'Admin';
+    if (giverData is Map) {
+      giverName =
+          giverData['name'] ??
+          giverData['user_name'] ??
+          giverData['first_name'] ??
+          'Admin';
+    } else if (giverData != null) {
+      giverName = giverData.toString();
+    }
+
+    // Robust mapping for assignee/receiver
+    final receiverData =
+        i['assignee'] ?? i['assigned_to_user'] ?? i['user'] ?? i['receiver'];
+    String receiverName = 'N/A';
+    if (receiverData is Map) {
+      receiverName =
+          receiverData['name'] ??
+          receiverData['user_name'] ??
+          receiverData['first_name'] ??
+          'N/A';
+    } else if (receiverData != null) {
+      receiverName = receiverData.toString();
+    }
+
+    // Robust mapping for title/task
+    final taskTitle =
+        i['title'] ??
+        i['task_details'] ??
+        i['task_name'] ??
+        i['description'] ??
+        i['details'] ??
+        'No Title';
+
     return {
-      "id": i['id'],
-      "details": i['title'] ?? 'No Title',
-      "giver": i['assigner']?['name'] ?? 'Admin',
-      "receiver": i['assignee']?['name'] ?? 'N/A',
-      "priority": _capitalize(i['priority'] ?? 'Medium'),
-      "status": _capitalize(i['status'] ?? 'Pending'),
-      "due": i['due_date'] ?? 'N/A',
+      "id": (i['id'] ?? i['task_id'] ?? '').toString(),
+      "srNo": index,
+      "details": taskTitle.toString(),
+      "giver": giverName,
+      "receiver": receiverName,
+      "priority": _capitalize(i['priority']?.toString() ?? 'Medium'),
+      "status": _capitalize(i['status']?.toString() ?? 'Pending'),
+      "due":
+          i['due_date']?.toString() ??
+          i['deadline']?.toString() ??
+          i['date']?.toString() ??
+          i['due']?.toString() ??
+          'N/A',
       "spent":
-          i['total_time_spent'] ?? i['total_seconds']?.toString() ?? '0h 0m',
-      "category": category,
+          i['total_time_spent']?.toString() ??
+          i['total_seconds']?.toString() ??
+          i['time_spent']?.toString() ??
+          '0h 0m',
+      "category": i['category']?.toString() ?? category,
       "raw": i,
     };
   }
@@ -171,7 +226,16 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
 
   String _capitalize(String s) {
     if (s.isEmpty) return s;
-    return s[0].toUpperCase() + s.substring(1).toLowerCase();
+    String formatted = s.replaceAll('_', ' ');
+    List<String> words = formatted.split(' ');
+    String result = words
+        .map((word) {
+          if (word.isEmpty) return word;
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
+    if (result == 'In Progress' || result == 'Inprogress') return 'In Progress';
+    return result;
   }
 
   @override
@@ -527,6 +591,15 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
                   ),
                 DataColumn(
                   label: Text(
+                    "Sr No",
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
                     "Task Details",
                     style: GoogleFonts.inter(
                       fontWeight: FontWeight.w700,
@@ -616,6 +689,7 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
 
                 return DataRow(
                   cells: [
+                    DataCell(Text(task['srNo'].toString())),
                     if (_selectedEmployeeId != null)
                       DataCell(
                         Container(

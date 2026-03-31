@@ -29,7 +29,7 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
       _errorMessage = null;
     });
 
-    final response = await ApiService.getMySalaries();
+    final response = await ApiService.getManagerSalaries();
     if (response['error'] == false) {
       final List data = response['data'] ?? [];
       setState(() {
@@ -217,7 +217,7 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.grey400,
+                  color: AppColors.grey600,
                 ),
               ),
             ],

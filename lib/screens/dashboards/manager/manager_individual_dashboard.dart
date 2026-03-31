@@ -618,7 +618,7 @@ class _ManagerIndividualDashboardState
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        mainAxisExtent: 130,
+        mainAxisExtent: 140,
       ),
       itemCount: modules.length,
       itemBuilder: (context, index) {
@@ -661,13 +661,16 @@ class _ManagerIndividualDashboardState
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      module['title'],
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.navy,
-                        letterSpacing: -0.5,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        module['title'],
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.navy,
+                          letterSpacing: -0.5,
+                        ),
                       ),
                     ),
                     Text(
@@ -677,6 +680,8 @@ class _ManagerIndividualDashboardState
                         color: AppColors.grey400,
                         fontWeight: FontWeight.w600,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),

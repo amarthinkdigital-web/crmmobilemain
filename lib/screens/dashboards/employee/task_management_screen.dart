@@ -40,17 +40,44 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
         final List rawTo = responseTo['data'] ?? [];
         _assignedToMeTasks = rawTo.asMap().entries.map((e) {
           final i = e.value;
+          // Robust mapping for assigner/giver
+          final giverData =
+              i['assigner'] ?? i['assigned_by_user'] ?? i['giver'];
+          String giverName = 'Admin';
+          if (giverData is Map) {
+            giverName =
+                giverData['name'] ??
+                giverData['user_name'] ??
+                giverData['first_name'] ??
+                'Admin';
+          } else if (giverData != null) {
+            giverName = giverData.toString();
+          }
+
+          // Robust mapping for title/task
+          final taskTitle =
+              i['title'] ??
+              i['task_details'] ??
+              i['task_name'] ??
+              i['description'] ??
+              'No Title';
+
           return {
-            "id": i['id'],
+            "id": (i['id'] ?? i['task_id'] ?? '').toString(),
             "srNo": e.key + 1,
-            "taskDetails": i['title'] ?? 'No Title',
-            "assignedBy": i['assigner']?['name'] ?? 'Admin',
-            "priority": _capitalize(i['priority'] ?? 'Medium'),
-            "status": _capitalize(i['status'] ?? 'Pending'),
-            "dueDate": i['due_date'] ?? 'N/A',
+            "taskDetails": taskTitle.toString(),
+            "assignedBy": giverName,
+            "priority": _capitalize(i['priority']?.toString() ?? 'Medium'),
+            "status": _capitalize(i['status']?.toString() ?? 'Pending'),
+            "dueDate":
+                i['due_date']?.toString() ??
+                i['deadline']?.toString() ??
+                i['date']?.toString() ??
+                'N/A',
             "timeTracking":
-                i['total_time_spent'] ??
+                i['total_time_spent']?.toString() ??
                 i['total_seconds']?.toString() ??
+                i['time_spent']?.toString() ??
                 '00:00:00',
             "raw": i,
           };
@@ -61,17 +88,47 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
         final List rawBy = responseBy['data'] ?? [];
         _assignedByMeTasks = rawBy.asMap().entries.map((e) {
           final i = e.value;
+          // Robust mapping for assignee/receiver
+          final receiverData =
+              i['assignee'] ??
+              i['assigned_to_user'] ??
+              i['user'] ??
+              i['receiver'];
+          String receiverName = 'N/A';
+          if (receiverData is Map) {
+            receiverName =
+                receiverData['name'] ??
+                receiverData['user_name'] ??
+                receiverData['first_name'] ??
+                'N/A';
+          } else if (receiverData != null) {
+            receiverName = receiverData.toString();
+          }
+
+          // Robust mapping for title/task
+          final taskTitle =
+              i['title'] ??
+              i['task_details'] ??
+              i['task_name'] ??
+              i['description'] ??
+              'No Title';
+
           return {
-            "id": i['id'],
+            "id": (i['id'] ?? i['task_id'] ?? '').toString(),
             "srNo": e.key + 1,
-            "taskDetails": i['title'] ?? 'No Title',
-            "assignedTo": i['assignee']?['name'] ?? 'N/A',
-            "priority": _capitalize(i['priority'] ?? 'Medium'),
-            "status": _capitalize(i['status'] ?? 'Pending'),
-            "dueDate": i['due_date'] ?? 'N/A',
+            "taskDetails": taskTitle.toString(),
+            "assignedTo": receiverName,
+            "priority": _capitalize(i['priority']?.toString() ?? 'Medium'),
+            "status": _capitalize(i['status']?.toString() ?? 'Pending'),
+            "dueDate":
+                i['due_date']?.toString() ??
+                i['deadline']?.toString() ??
+                i['date']?.toString() ??
+                'N/A',
             "timeTracking":
-                i['total_time_spent'] ??
+                i['total_time_spent']?.toString() ??
                 i['total_seconds']?.toString() ??
+                i['time_spent']?.toString() ??
                 '00:00:00',
             "raw": i,
           };
@@ -93,7 +150,16 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
 
   String _capitalize(String s) {
     if (s.isEmpty) return s;
-    return s[0].toUpperCase() + s.substring(1).toLowerCase();
+    String formatted = s.replaceAll('_', ' ');
+    List<String> words = formatted.split(' ');
+    String result = words
+        .map((word) {
+          if (word.isEmpty) return word;
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
+    if (result == 'In Progress' || result == 'Inprogress') return 'In Progress';
+    return result;
   }
 
   @override
@@ -131,53 +197,63 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Task Management",
-                style: GoogleFonts.inter(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.navy,
-                  letterSpacing: -0.5,
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isSmall = constraints.maxWidth < 600;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Task Management",
+                    style: GoogleFonts.inter(
+                      fontSize: isSmall ? 20 : 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.navy,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Manage and track all your tasks",
+                    style: GoogleFonts.inter(
+                      fontSize: isSmall ? 12 : 14,
+                      color: AppColors.grey400,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                "Manage and track all your tasks in one place",
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: AppColors.grey400,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-        ElevatedButton.icon(
-          onPressed: _showAddTaskDialog,
-          icon: const Icon(Icons.add_rounded, size: 20),
-          label: Text(
-            "Add Task",
-            style: GoogleFonts.inter(fontWeight: FontWeight.w700),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.navy,
-            foregroundColor: AppColors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
             ),
-            elevation: 0,
-          ),
-        ),
-      ],
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: _showAddTaskDialog,
+              icon: Icon(Icons.add_rounded, size: isSmall ? 18 : 20),
+              label: Text(
+                isSmall ? "Add" : "Add Task",
+                style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.navy,
+                foregroundColor: AppColors.white,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isSmall ? 12 : 20,
+                  vertical: isSmall ? 10 : 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -273,23 +349,32 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
                   ),
                   child: Icon(icon, color: color, size: 20),
                 ),
-                Text(
-                  count,
-                  style: GoogleFonts.inter(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.navy,
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      count,
+                      style: GoogleFonts.inter(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              title,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.grey600,
+            Flexible(
+              child: Text(
+                title,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.grey600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -701,7 +786,7 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
   Future<void> _updateStatus(dynamic id, String status) async {
     Navigator.pop(context);
     setState(() => _isLoading = true);
-    final response = await ApiService.updateTaskStatus(id, status);
+    final response = await ApiService.updateEmployeeTaskStatus(id, status);
     if (response['error'] == false) {
       _fetchTasks();
     } else {
@@ -931,7 +1016,7 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
     };
 
     final res = widget.editTask == null
-        ? await ApiService.createEmployeeTask(data)
+        ? await ApiService.createEmployeeTask(data, null)
         : await ApiService.updateEmployeeTask(widget.editTask!['id'], data);
 
     if (mounted) {

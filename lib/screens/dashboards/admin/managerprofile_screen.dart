@@ -634,12 +634,15 @@ class _ManagerPageState extends State<ManagerPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            nameStr,
-                            style: GoogleFonts.inter(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.navy,
+                          Expanded(
+                            child: Text(
+                              nameStr,
+                              style: GoogleFonts.inter(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.navy,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           Container(
@@ -701,7 +704,11 @@ class _ManagerPageState extends State<ManagerPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                _buildActionButton(Icons.visibility_outlined, "View", () => _showManagerDetails(manager)),
+                _buildActionButton(
+                  Icons.visibility_outlined,
+                  "View",
+                  () => _showManagerDetails(manager),
+                ),
                 const SizedBox(width: 10),
                 // _buildActionButton(Icons.edit_outlined, "Edit", () {}),
                 // const SizedBox(width: 10),
@@ -722,9 +729,14 @@ class _ManagerPageState extends State<ManagerPage> {
   void _showManagerDetails(Map<String, dynamic> manager) {
     final String firstName = manager['first_name']?.toString() ?? '';
     final String lastName = manager['last_name']?.toString() ?? '';
-    final String nameStr = firstName.isNotEmpty ? '$firstName $lastName'.trim() : (manager['name']?.toString() ?? 'Unknown');
-    final String idStr = manager['employee_id']?.toString() ?? manager['id']?.toString() ?? 'N/A';
-    
+    final String nameStr = firstName.isNotEmpty
+        ? '$firstName $lastName'.trim()
+        : (manager['name']?.toString() ?? 'Unknown');
+    final String idStr =
+        manager['employee_id']?.toString() ??
+        manager['id']?.toString() ??
+        'N/A';
+
     String deptName = 'Unknown Dept';
     if (manager['department'] is Map) {
       deptName = manager['department']['name']?.toString() ?? 'Unknown Dept';
@@ -735,12 +747,14 @@ class _ManagerPageState extends State<ManagerPage> {
     }
 
     final String statusStr = manager['status']?.toString() ?? 'Active';
-    
+
     showDialog(
       context: context,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
             child: Padding(
@@ -752,10 +766,20 @@ class _ManagerPageState extends State<ManagerPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Manager Details', style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                      Text(
+                        'Manager Details',
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.navy,
+                        ),
+                      ),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close_rounded, color: AppColors.grey400),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: AppColors.grey400,
+                        ),
                       ),
                     ],
                   ),
@@ -771,26 +795,46 @@ class _ManagerPageState extends State<ManagerPage> {
                       child: Center(
                         child: Text(
                           nameStr.isNotEmpty ? nameStr[0].toUpperCase() : 'M',
-                          style: GoogleFonts.inter(fontSize: 32, fontWeight: FontWeight.w800, color: AppColors.navy),
+                          style: GoogleFonts.inter(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.navy,
+                          ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Center(
-                    child: Text(nameStr, style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.navy)),
+                    child: Text(
+                      nameStr,
+                      style: GoogleFonts.inter(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
+                    ),
                   ),
                   Center(
                     child: Container(
                       margin: const EdgeInsets.only(top: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(statusStr).withValues(alpha: 0.1),
+                        color: _getStatusColor(
+                          statusStr,
+                        ).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         statusStr,
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: _getStatusColor(statusStr)),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: _getStatusColor(statusStr),
+                        ),
                       ),
                     ),
                   ),
@@ -800,39 +844,94 @@ class _ManagerPageState extends State<ManagerPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildDetailRow(Icons.badge_outlined, 'Employee ID', idStr),
-                          const Divider(height: 24, thickness: 1, color: AppColors.offWhite),
-                          _buildDetailRow(Icons.work_outline_rounded, 'Department', deptName),
-                          const Divider(height: 24, thickness: 1, color: AppColors.offWhite),
-                          ...manager.entries.where((e) {
-                            final kStr = e.key.toLowerCase();
-                            // Exclude already handled or irrelevant fields
-                            if (['id', 'employee_id', 'name', 'first_name', 'last_name', 'status', 'created_at', 'updated_at', 'deleted_at', 'department', 'department_name', 'dept', 'user_type', 'role'].contains(kStr)) return false;
-                            if (e.value == null || e.value.toString().trim().isEmpty || e.value.toString() == 'null') return false;
-                            if (e.value is Map || e.value is List) return false;
-                            return true;
-                          }).map((e) {
-                            String formatLabel(String key) {
-                              return key.replaceAll('_', ' ').split(' ').map((word) {
-                                if (word.isEmpty) return '';
-                                return word[0].toUpperCase() + word.substring(1).toLowerCase();
-                              }).join(' ');
-                            }
-                            String formatValue(dynamic val) {
-                              String vStr = val.toString();
-                              // Basic date formatting if it looks like an ISO date
-                              if (vStr.contains('T') && vStr.length >= 19 && DateTime.tryParse(vStr) != null) {
-                                return vStr.split('T').first;
-                              }
-                              return vStr;
-                            }
-                            return Column(
-                              children: [
-                                _buildDetailRow(Icons.info_outline_rounded, formatLabel(e.key), formatValue(e.value)),
-                                const Divider(height: 24, thickness: 1, color: AppColors.offWhite),
-                              ],
-                            );
-                          }),
+                          _buildDetailRow(
+                            Icons.badge_outlined,
+                            'Employee ID',
+                            idStr,
+                          ),
+                          const Divider(
+                            height: 24,
+                            thickness: 1,
+                            color: AppColors.offWhite,
+                          ),
+                          _buildDetailRow(
+                            Icons.work_outline_rounded,
+                            'Department',
+                            deptName,
+                          ),
+                          const Divider(
+                            height: 24,
+                            thickness: 1,
+                            color: AppColors.offWhite,
+                          ),
+                          ...manager.entries
+                              .where((e) {
+                                final kStr = e.key.toLowerCase();
+                                // Exclude already handled or irrelevant fields
+                                if ([
+                                  'id',
+                                  'employee_id',
+                                  'name',
+                                  'first_name',
+                                  'last_name',
+                                  'status',
+                                  'created_at',
+                                  'updated_at',
+                                  'deleted_at',
+                                  'department',
+                                  'department_name',
+                                  'dept',
+                                  'user_type',
+                                  'role',
+                                ].contains(kStr))
+                                  return false;
+                                if (e.value == null ||
+                                    e.value.toString().trim().isEmpty ||
+                                    e.value.toString() == 'null')
+                                  return false;
+                                if (e.value is Map || e.value is List)
+                                  return false;
+                                return true;
+                              })
+                              .map((e) {
+                                String formatLabel(String key) {
+                                  return key
+                                      .replaceAll('_', ' ')
+                                      .split(' ')
+                                      .map((word) {
+                                        if (word.isEmpty) return '';
+                                        return word[0].toUpperCase() +
+                                            word.substring(1).toLowerCase();
+                                      })
+                                      .join(' ');
+                                }
+
+                                String formatValue(dynamic val) {
+                                  String vStr = val.toString();
+                                  // Basic date formatting if it looks like an ISO date
+                                  if (vStr.contains('T') &&
+                                      vStr.length >= 19 &&
+                                      DateTime.tryParse(vStr) != null) {
+                                    return vStr.split('T').first;
+                                  }
+                                  return vStr;
+                                }
+
+                                return Column(
+                                  children: [
+                                    _buildDetailRow(
+                                      Icons.info_outline_rounded,
+                                      formatLabel(e.key),
+                                      formatValue(e.value),
+                                    ),
+                                    const Divider(
+                                      height: 24,
+                                      thickness: 1,
+                                      color: AppColors.offWhite,
+                                    ),
+                                  ],
+                                );
+                              }),
                           const SizedBox(height: 8),
                         ],
                       ),
@@ -862,9 +961,23 @@ class _ManagerPageState extends State<ManagerPage> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.grey400)),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.grey400,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(value, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.navy)),
+            Text(
+              value,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.navy,
+              ),
+            ),
           ],
         ),
       ],
