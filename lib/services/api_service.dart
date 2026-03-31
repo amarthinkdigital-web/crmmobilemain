@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'auth_service.dart';
 
 /// Live Backend: http://192.168.1.12:8000/api
 ///
@@ -798,9 +799,10 @@ class ApiService {
   static Future<Map<String, dynamic>> getAdminManagerLeaveRequests() async {
     try {
       final headers = await _headers();
+      // Using underscored route as requested/established in admin prefix
       final response = await http
           .get(
-            Uri.parse('$baseUrl/admin/manager/leave-requests'),
+            Uri.parse('$baseUrl/admin/manager/leave_requests'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
@@ -824,19 +826,24 @@ class ApiService {
   }) async {
     try {
       final headers = await _headers();
+      bool isReject = status.toLowerCase().contains('reject');
+      String action = isReject ? 'reject' : 'approve';
+
+      // Parse 'Approved Paid' or 'Approved Unpaid' to 'paid' or 'unpaid'
+      String finalType =
+          (status.toLowerCase().contains('unpaid') ||
+              (leaveType?.toLowerCase().contains('unpaid') ?? false))
+          ? 'unpaid'
+          : 'paid';
+
       final body = jsonEncode({
-        'status': status,
-        'leave_status': status,
-        'leave': status,
-        'id': id,
-        'leave_id': id,
-        'leave_type': leaveType ?? 'Leave',
-        if (reason != null && reason.isNotEmpty) 'reject_reason': reason,
+        'leave_type': finalType,
+        'type_label': 'Manager', // Backend uses this to distinguish models
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       });
       final response = await http
           .post(
-            Uri.parse('$baseUrl/admin/manager/leave-requests/$id/approve'),
+            Uri.parse('$baseUrl/admin/manager/leave_requests/$id/$action'),
             headers: headers,
             body: body,
           )
@@ -845,7 +852,7 @@ class ApiService {
       if (response.statusCode == 200) return {'error': false, ...data};
       return {
         'error': true,
-        'message': data['message'] ?? 'Failed to update leave',
+        'message': data['message'] ?? 'Failed to update manager leave',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -923,7 +930,7 @@ class ApiService {
       final headers = await _headers();
       final response = await http
           .get(
-            Uri.parse('$baseUrl/admin/employee/leave-requests'),
+            Uri.parse('$baseUrl/admin/employee/leave_requests'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
@@ -947,19 +954,24 @@ class ApiService {
   }) async {
     try {
       final headers = await _headers();
+      bool isReject = status.toLowerCase().contains('reject');
+      String action = isReject ? 'reject' : 'approve';
+
+      // Parse 'Approved Paid' or 'Approved Unpaid' to 'paid' or 'unpaid'
+      String finalType =
+          (status.toLowerCase().contains('unpaid') ||
+              (leaveType?.toLowerCase().contains('unpaid') ?? false))
+          ? 'unpaid'
+          : 'paid';
+
       final body = jsonEncode({
-        'status': status,
-        'leave_status': status,
-        'leave': status,
-        'id': id,
-        'leave_id': id,
-        'leave_type': leaveType ?? 'Leave',
-        if (reason != null && reason.isNotEmpty) 'reject_reason': reason,
+        'leave_type': finalType,
+        'type_label': 'Employee',
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       });
       final response = await http
           .post(
-            Uri.parse('$baseUrl/admin/employee/leave-requests/$id/approve'),
+            Uri.parse('$baseUrl/admin/employee/leave_requests/$id/$action'),
             headers: headers,
             body: body,
           )
@@ -968,7 +980,7 @@ class ApiService {
       if (response.statusCode == 200) return {'error': false, ...data};
       return {
         'error': true,
-        'message': data['message'] ?? 'Failed to update leave',
+        'message': data['message'] ?? 'Failed to update employee leave',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
@@ -3218,5 +3230,179 @@ class ApiService {
       }
     }
     return [];
+  }
+
+  // --- Events & Calendar API ---
+  static Future<Map<String, dynamic>> getEvents() async {
+    try {
+      final headers = await _headers();
+      final role = (await AuthService.getUserRole() ?? 'employee')
+          .toLowerCase();
+
+      String endpoint = '/employee/events';
+      if (role == 'admin')
+        endpoint = '/admin/events';
+      else if (role == 'manager')
+        endpoint = '/manager/events';
+
+      final response = await http
+          .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200)
+        return {'error': false, 'data': _extractList(data)};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to fetch events',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getTasks() async {
+    try {
+      final headers = await _headers();
+      final role = (await AuthService.getUserRole() ?? 'employee')
+          .toLowerCase();
+
+      String endpoint = '/employee/tasks';
+      if (role == 'admin')
+        endpoint = '/admin/tasks';
+      else if (role == 'manager')
+        endpoint = '/manager/tasks';
+
+      final response = await http
+          .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200)
+        return {'error': false, 'data': _extractList(data)};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to fetch tasks',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getPersonalLeaves() async {
+    try {
+      final headers = await _headers();
+      final role = (await AuthService.getUserRole() ?? 'employee')
+          .toLowerCase();
+
+      String endpoint = '/employee/leaves';
+      if (role == 'admin')
+        return {
+          'error': false,
+          'data': [],
+        }; // Admin leaves usually handled differently OR empty
+      if (role == 'manager') endpoint = '/manager/leaves';
+
+      final response = await http
+          .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200)
+        return {'error': false, 'data': _extractList(data)};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to fetch leaves',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createEvent(
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final headers = await _headers();
+      final role = (await AuthService.getUserRole() ?? 'employee')
+          .toLowerCase();
+
+      String endpoint = '/employee/events';
+      if (role == 'admin')
+        endpoint = '/admin/events';
+      else if (role == 'manager')
+        endpoint = '/manager/events';
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201)
+        return {'error': false, ...data};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to create event',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getOfficialLeaves() async {
+    try {
+      final headers = await _headers();
+      final role = (await AuthService.getUserRole() ?? 'employee')
+          .toLowerCase();
+
+      String endpoint = '/employee/official-leaves';
+      if (role == 'admin')
+        endpoint = '/admin/official-leaves';
+      else if (role == 'manager')
+        endpoint = '/manager/official-leaves';
+
+      final response = await http
+          .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200)
+        return {'error': false, 'data': _extractList(data)};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to fetch official leaves',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createOfficialLeave(
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final headers = await _headers();
+      // Only Admin or Manager (HR) usually can create holidays in backend
+      final role = (await AuthService.getUserRole() ?? 'admin').toLowerCase();
+      String endpoint = role == 'manager'
+          ? '/manager/official-leaves'
+          : '/admin/official-leaves';
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 || response.statusCode == 201)
+        return {'error': false, ...data};
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to create official leave',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
   }
 }
