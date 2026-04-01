@@ -14,12 +14,15 @@ class TeamAttendanceScreen extends StatefulWidget {
 class _TeamAttendanceScreenState extends State<TeamAttendanceScreen> {
   // Filters & State for Attendance Logs
   String selectedEmployee = "All Employees";
+  String? selectedEmployeeId;
   String selectedStatus = "All Status";
   String selectedMonth = DateFormat('MMMM').format(DateTime.now());
   DateTime? selectedDate;
   final searchController = TextEditingController();
 
-  final List<String> employees = ["All Employees"];
+  final List<Map<String, String>> employees = [
+    {"id": "all", "name": "All Employees"}
+  ];
   final List<String> statuses = [
     "All Status", "Present", "Absent", "Late", "On Leave", "Half Day", "Weekly Off", "Overtime",
   ];
@@ -65,7 +68,21 @@ class _TeamAttendanceScreenState extends State<TeamAttendanceScreen> {
     // Fetch Employees for filter/count
     final empRes = await ApiService.getEmployeeProfiles();
     if (empRes['error'] == false) {
-      _totalEmpCount = (empRes['data'] as List).length;
+      final List empData = empRes['data'] ?? [];
+      _totalEmpCount = empData.length;
+
+      // Populate employees list for filter dropdown
+      if (employees.length <= 1) {
+        for (var emp in empData) {
+          final fname = emp['first_name']?.toString() ?? '';
+          final lname = emp['last_name']?.toString() ?? '';
+          final fullName = '$fname $lname'.trim();
+          final id = emp['user_id']?.toString() ?? emp['id']?.toString() ?? '';
+          if (fullName.isNotEmpty && id.isNotEmpty) {
+            employees.add({"id": id, "name": fullName});
+          }
+        }
+      }
     }
 
     String? dateStr;
@@ -77,9 +94,11 @@ class _TeamAttendanceScreenState extends State<TeamAttendanceScreen> {
     } else {
       final monthIndex = months.indexOf(selectedMonth) + 1;
       if (monthIndex > 0) {
+        // Use current year or a specific year if needed
         final now = DateTime.now();
-        final start = DateTime(now.year, monthIndex, 1);
-        final end = DateTime(now.year, monthIndex + 1, 0);
+        final year = now.year;
+        final start = DateTime(year, monthIndex, 1);
+        final end = DateTime(year, monthIndex + 1, 0);
         startStr = DateFormat('yyyy-MM-dd').format(start);
         endStr = DateFormat('yyyy-MM-dd').format(end);
       }
@@ -140,19 +159,24 @@ class _TeamAttendanceScreenState extends State<TeamAttendanceScreen> {
 
       setState(() {
         attendanceData = List<Map<String, dynamic>>.from(dataList);
-        employees.clear(); employees.addAll(empSet);
-        if (!employees.contains(selectedEmployee)) selectedEmployee = "All Employees";
         
         // Enrich data with calculated stats
         for (var i = 0; i < attendanceData.length; i++) {
           final userId = attendanceData[i]['user_id']?.toString() ?? '0';
           if (attendanceData[i]['stats'] == null) {
-             final s = monthlyStatsMap[userId]!;
-             attendanceData[i]['stats'] = {
-               'present': s['present'], 'absent': s['absent'], 'leave': s['leave'], 'late': s['late'],
-               'half': s['half'], 'off': s['off'], 'ot': "${s['ot'].toStringAsFixed(1)}h",
-               'totalWork': "${s['totalWork'].toStringAsFixed(1)}h",
-             };
+            final s = monthlyStatsMap[userId];
+            if (s != null) {
+              attendanceData[i]['stats'] = {
+                'present': s['present'],
+                'absent': s['absent'],
+                'leave': s['leave'],
+                'late': s['late'],
+                'half': s['half'],
+                'off': s['off'],
+                'ot': "${s['ot'].toStringAsFixed(1)}h",
+                'totalWork': "${s['totalWork'].toStringAsFixed(1)}h",
+              };
+            }
           }
         }
         isLoading = false;
@@ -184,9 +208,15 @@ class _TeamAttendanceScreenState extends State<TeamAttendanceScreen> {
 
       final search = searchController.text.toLowerCase();
       bool matchSearch = nameStr.toLowerCase().contains(search);
-      bool matchEmp = selectedEmployee == "All Employees" || nameStr == selectedEmployee;
+
+      // Match by ID if selected
+      bool matchEmp = selectedEmployeeId == null ||
+          selectedEmployeeId == "all" ||
+          d['user_id']?.toString() == selectedEmployeeId;
+
       String statusStr = d['attendance_status']?.toString() ?? d['status']?.toString() ?? 'Present';
-      bool matchStatus = selectedStatus == "All Status" || statusStr.toLowerCase().contains(selectedStatus.toLowerCase());
+      bool matchStatus = selectedStatus == "All Status" ||
+          statusStr.toLowerCase().contains(selectedStatus.toLowerCase());
 
       return matchSearch && matchEmp && matchStatus;
     }).toList();
@@ -291,21 +321,41 @@ class _TeamAttendanceScreenState extends State<TeamAttendanceScreen> {
 
   Widget _buildHeader(String title, String sub) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.navy, letterSpacing: -0.5)),
-            Text(sub, style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey400, fontWeight: FontWeight.w500)),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.navy,
+                      letterSpacing: -0.5),
+                  overflow: TextOverflow.ellipsis),
+              Text(sub,
+                  style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: AppColors.grey400,
+                      fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis),
+            ],
+          ),
         ),
         if (title == "Team Attendance")
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.file_download_outlined, size: 20),
-            label: const Text("Export"),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: AppColors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          SizedBox(
+            height: 36,
+            child: ElevatedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.file_download_outlined, size: 16),
+              label: const Text("Export", style: TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.navy,
+                  foregroundColor: AppColors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10))),
+            ),
           ),
       ],
     );
@@ -374,17 +424,60 @@ class _TeamAttendanceScreenState extends State<TeamAttendanceScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildDropdown(null, selectedEmployee, employees, (v) => setState(() => selectedEmployee = v!)),
+                  _buildDropdown(
+                      null,
+                      selectedEmployeeId ?? "all",
+                      employees
+                          .map((e) => DropdownMenuItem<String>(
+                              value: e['id'], child: Text(e['name']!)))
+                          .toList(), (v) {
+                    setState(() {
+                      selectedEmployeeId = v;
+                      selectedEmployee = employees
+                          .firstWhere((e) => e['id'] == v)['name']!;
+                    });
+                  }),
                   const SizedBox(width: 8),
                   _buildDatePicker(),
                   const SizedBox(width: 8),
-                  _buildDropdown(null, selectedStatus, statuses, (v) => setState(() => selectedStatus = v!)),
+                  _buildDropdown(
+                      null,
+                      selectedStatus,
+                      statuses
+                          .map((s) => DropdownMenuItem<String>(
+                              value: s, child: Text(s)))
+                          .toList(),
+                      (v) => setState(() => selectedStatus = v!)),
                   const SizedBox(width: 8),
-                  _buildDropdown(null, selectedMonth, months, (v) => setState(() => selectedMonth = v!)),
+                  _buildDropdown(
+                      null,
+                      selectedMonth,
+                      months
+                          .map((m) => DropdownMenuItem<String>(
+                              value: m, child: Text(m)))
+                          .toList(),
+                      (v) => setState(() => selectedMonth = v!)),
                   const SizedBox(width: 12),
                   ElevatedButton(onPressed: _fetchAttendance, style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: AppColors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text("Search")),
                   const SizedBox(width: 8),
-                  OutlinedButton(onPressed: () { setState(() { selectedDate = null; selectedEmployee = "All Employees"; selectedStatus = "All Status"; selectedMonth = DateFormat('MMMM').format(DateTime.now()); searchController.clear(); }); _fetchAttendance(); }, style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), side: BorderSide(color: AppColors.grey200)), child: const Text("Clear")),
+                  OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          selectedDate = null;
+                          selectedEmployee = "All Employees";
+                          selectedEmployeeId = "all";
+                          selectedStatus = "All Status";
+                          selectedMonth =
+                              DateFormat('MMMM').format(DateTime.now());
+                          searchController.clear();
+                        });
+                        _fetchAttendance();
+                      },
+                      style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          side: BorderSide(color: AppColors.grey200)),
+                      child: const Text("Clear")),
                 ],
               ),
             ),
@@ -394,15 +487,21 @@ class _TeamAttendanceScreenState extends State<TeamAttendanceScreen> {
     );
   }
 
-  Widget _buildDropdown(String? label, String value, List<String> items, void Function(String?) onChanged) {
+  Widget _buildDropdown(String? label, String value,
+      List<DropdownMenuItem<String>> items, void Function(String?) onChanged) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.grey100)),
+      decoration: BoxDecoration(
+          color: AppColors.offWhite,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.grey100)),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: value, isDense: true,
-          style: GoogleFonts.inter(color: AppColors.navy, fontSize: 13, fontWeight: FontWeight.w600),
-          items: items.map((String item) => DropdownMenuItem<String>(value: item, child: Text(item))).toList(),
+          value: value,
+          isDense: true,
+          style: GoogleFonts.inter(
+              color: AppColors.navy, fontSize: 13, fontWeight: FontWeight.w600),
+          items: items,
           onChanged: onChanged,
         ),
       ),

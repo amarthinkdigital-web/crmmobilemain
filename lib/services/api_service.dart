@@ -2747,6 +2747,7 @@ class ApiService {
   }) async {
     try {
       final headers = await _headers();
+      // Documentation says: GET /api/admin/salary
       String url = '$baseUrl/admin/salary';
       List<String> params = [];
       if (month != null) params.add('month=$month');
@@ -2757,8 +2758,13 @@ class ApiService {
           .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body);
-      if (response.statusCode == 200)
-        return {'error': false, 'data': data['data'] ?? data};
+      if (response.statusCode == 200) {
+        // Handle documented response structure: { data: { salaries: [...] } }
+        if (data is Map && data['data'] is Map && data['data']['salaries'] is List) {
+           return {'error': false, 'data': data['data']['salaries']};
+        }
+        return {'error': false, 'data': _extractList(data)};
+      }
       return {
         'error': true,
         'message': data['message'] ?? 'Failed to load salaries',
@@ -2936,11 +2942,20 @@ class ApiService {
   }
 
   // Employee Endpoints
-  static Future<Map<String, dynamic>> getMySalaries() async {
+  static Future<Map<String, dynamic>> getMySalaries({
+    int? month,
+    int? year,
+  }) async {
     try {
       final headers = await _headers();
+      String url = '$baseUrl/employee/salaries';
+      List<String> params = [];
+      if (month != null) params.add('month=$month');
+      if (year != null) params.add('year=$year');
+      if (params.isNotEmpty) url += '?' + params.join('&');
+
       final response = await http
-          .get(Uri.parse('$baseUrl/employee/salaries'), headers: headers)
+          .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
@@ -2955,11 +2970,20 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> getManagerSalaries() async {
+  static Future<Map<String, dynamic>> getManagerSalaries({
+    int? month,
+    int? year,
+  }) async {
     try {
       final headers = await _headers();
+      String url = '$baseUrl/manager/salary';
+      List<String> params = [];
+      if (month != null) params.add('month=$month');
+      if (year != null) params.add('year=$year');
+      if (params.isNotEmpty) url += '?' + params.join('&');
+
       final response = await http
-          .get(Uri.parse('$baseUrl/manager/salary'), headers: headers)
+          .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 15));
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
@@ -2977,15 +3001,23 @@ class ApiService {
   static Future<Map<String, dynamic>> getSalaryDetails(int id) async {
     try {
       final headers = await _headers();
+      // Documentation says: GET /api/employee/salaries/{id}
       final response = await http
           .get(Uri.parse('$baseUrl/employee/salaries/$id'), headers: headers)
           .timeout(const Duration(seconds: 10));
+
       final data = jsonDecode(response.body);
-      if (response.statusCode == 200)
+      if (response.statusCode == 200) {
         return {'error': false, 'data': data['data'] ?? data};
+      } else if (response.statusCode == 404) {
+        return {
+          'error': true,
+          'message': 'Salary record ID does not exist (404).',
+        };
+      }
       return {
         'error': true,
-        'message': data['message'] ?? 'Failed to load salary details',
+        'message': data['message'] ?? 'Failed to load salary slip details (${response.statusCode})',
       };
     } catch (e) {
       return {'error': true, 'message': 'Network error: ${e.toString()}'};

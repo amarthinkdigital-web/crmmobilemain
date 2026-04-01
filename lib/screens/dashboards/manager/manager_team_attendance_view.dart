@@ -14,12 +14,15 @@ class TeamAttendanceViewScreen extends StatefulWidget {
 class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
   // Filters & State for Attendance Logs
   String selectedEmployee = "All Employees";
+  String? selectedEmployeeId;
   String selectedStatus = "All Status";
   String selectedMonth = DateFormat('MMMM').format(DateTime.now());
   DateTime? selectedDate;
   final searchController = TextEditingController();
 
-  final List<String> employees = ["All Employees"];
+  final List<Map<String, String>> employees = [
+    {"id": "all", "name": "All Employees"}
+  ];
   final List<String> statuses = [
     "All Status", "Present", "Absent", "Late", "On Leave", "Half Day", "Weekly Off", "Overtime",
   ];
@@ -61,13 +64,39 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
 
   Future<void> _fetchAttendance() async {
     setState(() => isLoading = true);
-    
-    // Fetch Employees for filter/count
-    final empRes = await ApiService.getEmployeeProfiles();
-    if (empRes['error'] == false) {
-      _totalEmpCount = (empRes['data'] as List).length;
+
+    // 1. Fetch Employee Profiles for Dropdown
+    try {
+      final empRes = await ApiService.getEmployeeProfiles();
+      if (empRes['error'] == false) {
+        final List empData = empRes['data'] ?? [];
+        _totalEmpCount = empData.length;
+
+        // Reset and populate employees list
+        List<Map<String, String>> fetchedEmps = [
+          {"id": "all", "name": "All Employees"}
+        ];
+        
+        for (var emp in empData) {
+          final fname = emp['first_name']?.toString() ?? '';
+          final lname = emp['last_name']?.toString() ?? '';
+          final fullName = '$fname $lname'.trim();
+          final id = emp['user_id']?.toString() ?? emp['id']?.toString() ?? '';
+          if (fullName.isNotEmpty && id.isNotEmpty) {
+            fetchedEmps.add({"id": id, "name": fullName});
+          }
+        }
+        
+        setState(() {
+          employees.clear();
+          employees.addAll(fetchedEmps);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching employees: $e");
     }
 
+    // 2. Prepare Date/Filter strings
     String? dateStr;
     String? startStr;
     String? endStr;
@@ -78,83 +107,96 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
       final monthIndex = months.indexOf(selectedMonth) + 1;
       if (monthIndex > 0) {
         final now = DateTime.now();
-        final start = DateTime(now.year, monthIndex, 1);
-        final end = DateTime(now.year, monthIndex + 1, 0);
+        final year = now.year;
+        final start = DateTime(year, monthIndex, 1);
+        final end = DateTime(year, monthIndex + 1, 0).subtract(const Duration(seconds: 1)); // End of month
         startStr = DateFormat('yyyy-MM-dd').format(start);
         endStr = DateFormat('yyyy-MM-dd').format(end);
       }
     }
-    
-    final res = await ApiService.getAllAttendances(date: dateStr, startDate: startStr, endDate: endStr);
-    if (!mounted) return;
 
-    if (res['error'] == false) {
-      final List dataList = res['data'] ?? [];
-      final Set<String> empSet = {"All Employees"};
+    // 3. Fetch Attendance Records
+    try {
+      final res = await ApiService.getAllAttendances(
+        date: dateStr,
+        startDate: startStr,
+        endDate: endStr,
+        userId: selectedEmployeeId == "all" ? null : selectedEmployeeId,
+      );
 
-      _presentCount = 0; _absentCount = 0; _lateCount = 0; _leaveCount = 0;
-      _halfDayCount = 0; _offCount = 0; _otCount = 0;
+      if (!mounted) return;
 
-      final Map<String, Map<String, dynamic>> monthlyStatsMap = {};
-
-      for (var item in dataList) {
-        final Map<String, dynamic> userMap = item['user'] is Map ? item['user'] : item;
-        final fname = userMap['first_name']?.toString() ?? item['first_name']?.toString() ?? '';
-        final lname = userMap['last_name']?.toString() ?? item['last_name']?.toString() ?? '';
-        final String nameStr = fname.isNotEmpty ? '$fname $lname'.trim() : (userMap['name']?.toString() ?? item['name']?.toString() ?? 'Unknown');
+      if (res['error'] == false) {
+        final List dataList = res['data'] ?? [];
         
-        if (nameStr != 'Unknown') empSet.add(nameStr);
+        // Reset summary counts
+        _presentCount = 0; _absentCount = 0; _lateCount = 0; _leaveCount = 0;
+        _halfDayCount = 0; _offCount = 0; _otCount = 0;
 
-        final userId = item['user_id']?.toString() ?? '0';
-        monthlyStatsMap.putIfAbsent(userId, () => {
-          'present': 0, 'absent': 0, 'late': 0, 'leave': 0, 'half': 0, 'off': 0, 'ot': 0.0, 'totalWork': 0.0
-        });
+        final Map<String, Map<String, dynamic>> userStatsMap = {};
 
-        final status = (item['attendance_status']?.toString() ?? '').toLowerCase();
-        final isLate = item['is_late'] == 1 || item['is_late'] == true || status.contains('late');
-        final otHours = double.tryParse(item['ot_hours']?.toString() ?? '0') ?? 0.0;
-        
-        if (status.contains('present') || status.contains('working') || isLate) {
-          _presentCount++; monthlyStatsMap[userId]!['present']++;
-          if (isLate) { _lateCount++; monthlyStatsMap[userId]!['late']++; }
-          if (status.contains('half')) { _halfDayCount++; monthlyStatsMap[userId]!['half']++; }
-        } else if (status.contains('absent')) {
-          _absentCount++; monthlyStatsMap[userId]!['absent']++;
-        } else if (status.contains('leave')) {
-          _leaveCount++; monthlyStatsMap[userId]!['leave']++;
-        } else if (status.contains('off') || status.contains('holiday')) {
-          _offCount++; monthlyStatsMap[userId]!['off']++;
-        }
-        
-        if (otHours > 0) { _otCount++; monthlyStatsMap[userId]!['ot'] += otHours; }
+        for (var item in dataList) {
+          final userId = item['user_id']?.toString() ?? '0';
+          userStatsMap.putIfAbsent(userId, () => {
+            'present': 0, 'absent': 0, 'late': 0, 'leave': 0, 'half': 0, 'off': 0, 'ot': 0.0, 'totalWork': 0.0
+          });
 
-        final DateTime? cin = item['clock_in'] != null ? DateTime.tryParse(item['clock_in'].toString()) : null;
-        final DateTime? cout = item['clock_out'] != null ? DateTime.tryParse(item['clock_out'].toString()) : null;
-        if (cin != null && cout != null) {
-           monthlyStatsMap[userId]!['totalWork'] += cout.difference(cin).inMinutes / 60.0;
-        }
-      }
+          final status = (item['attendance_status']?.toString() ?? '').toLowerCase();
+          final isLate = item['is_late'] == 1 || item['is_late'] == true || status.contains('late');
+          final otHours = double.tryParse(item['ot_hours']?.toString() ?? '0') ?? 0.0;
+          
+          if (status.contains('present') || status.contains('working') || isLate) {
+            _presentCount++; userStatsMap[userId]!['present']++;
+            if (isLate) { _lateCount++; userStatsMap[userId]!['late']++; }
+            if (status.contains('half')) { _halfDayCount++; userStatsMap[userId]!['half']++; }
+          } else if (status.contains('absent')) {
+            _absentCount++; userStatsMap[userId]!['absent']++;
+          } else if (status.contains('leave') || status.contains('official_leave')) {
+            _leaveCount++; userStatsMap[userId]!['leave']++;
+          } else if (status.contains('off') || status.contains('holiday') || status.contains('weekly_off')) {
+            _offCount++; userStatsMap[userId]!['off']++;
+          }
+          
+          if (otHours > 0) { _otCount++; userStatsMap[userId]!['ot'] += otHours; }
 
-      setState(() {
-        attendanceData = List<Map<String, dynamic>>.from(dataList);
-        employees.clear(); employees.addAll(empSet);
-        if (!employees.contains(selectedEmployee)) selectedEmployee = "All Employees";
-        
-        // Enrich data with calculated stats
-        for (var i = 0; i < attendanceData.length; i++) {
-          final userId = attendanceData[i]['user_id']?.toString() ?? '0';
-          if (attendanceData[i]['stats'] == null) {
-             final s = monthlyStatsMap[userId]!;
-             attendanceData[i]['stats'] = {
-               'present': s['present'], 'absent': s['absent'], 'leave': s['leave'], 'late': s['late'],
-               'half': s['half'], 'off': s['off'], 'ot': "${s['ot'].toStringAsFixed(1)}h",
-               'totalWork': "${s['totalWork'].toStringAsFixed(1)}h",
-             };
+          // Calculate work hours if available
+          final DateTime? cin = item['clock_in'] != null ? DateTime.tryParse(item['clock_in'].toString()) : null;
+          final DateTime? cout = item['clock_out'] != null ? DateTime.tryParse(item['clock_out'].toString()) : null;
+          if (cin != null && cout != null) {
+             userStatsMap[userId]!['totalWork'] += cout.difference(cin).inMinutes / 60.0;
           }
         }
-        isLoading = false;
-      });
-    } else {
+
+        setState(() {
+          attendanceData = List<Map<String, dynamic>>.from(dataList);
+
+          // Enrich each data item with its user's summary stats for the current view
+          for (var i = 0; i < attendanceData.length; i++) {
+            final uId = attendanceData[i]['user_id']?.toString() ?? '0';
+            final s = userStatsMap[uId];
+            if (s != null) {
+              attendanceData[i]['stats'] = {
+                'present': s['present'],
+                'absent': s['absent'],
+                'leave': s['leave'],
+                'late': s['late'],
+                'half': s['half'],
+                'off': s['off'],
+                'ot': "${s['ot'].toStringAsFixed(1)}h",
+                'totalWork': "${s['totalWork'].toStringAsFixed(1)}h",
+              };
+            }
+          }
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          attendanceData = [];
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching attendance: $e");
       setState(() => isLoading = false);
     }
   }
@@ -175,15 +217,26 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
   List<Map<String, dynamic>> get filteredAttendance {
     return attendanceData.where((d) {
       final Map<String, dynamic> userMap = d['user'] is Map ? d['user'] : d;
-      final fname = userMap['first_name']?.toString() ?? d['first_name']?.toString() ?? '';
-      final lname = userMap['last_name']?.toString() ?? d['last_name']?.toString() ?? '';
-      final nameStr = fname.isNotEmpty ? '$fname $lname'.trim() : (userMap['name']?.toString() ?? d['name']?.toString() ?? 'Unknown');
+      final fname =
+          userMap['first_name']?.toString() ?? d['first_name']?.toString() ?? '';
+      final lname =
+          userMap['last_name']?.toString() ?? d['last_name']?.toString() ?? '';
+      final nameStr = fname.isNotEmpty
+          ? '$fname $lname'.trim()
+          : (userMap['name']?.toString() ?? d['name']?.toString() ?? 'Unknown');
 
       final search = searchController.text.toLowerCase();
       bool matchSearch = nameStr.toLowerCase().contains(search);
-      bool matchEmp = selectedEmployee == "All Employees" || nameStr == selectedEmployee;
-      String statusStr = d['attendance_status']?.toString() ?? d['status']?.toString() ?? 'Present';
-      bool matchStatus = selectedStatus == "All Status" || statusStr.toLowerCase().contains(selectedStatus.toLowerCase());
+
+      // Match by ID if selected
+      bool matchEmp = selectedEmployeeId == null ||
+          selectedEmployeeId == "all" ||
+          d['user_id']?.toString() == selectedEmployeeId;
+
+      String statusStr =
+          d['attendance_status']?.toString() ?? d['status']?.toString() ?? 'Present';
+      bool matchStatus = selectedStatus == "All Status" ||
+          statusStr.toLowerCase().contains(selectedStatus.toLowerCase());
 
       return matchSearch && matchEmp && matchStatus;
     }).toList();
@@ -288,21 +341,41 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
 
   Widget _buildHeader(String title, String sub) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.navy, letterSpacing: -0.5)),
-            Text(sub, style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey400, fontWeight: FontWeight.w500)),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.navy,
+                      letterSpacing: -0.5),
+                  overflow: TextOverflow.ellipsis),
+              Text(sub,
+                  style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: AppColors.grey400,
+                      fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis),
+            ],
+          ),
         ),
         if (title == "Team Attendance")
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.file_download_outlined, size: 20),
-            label: const Text("Export"),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: AppColors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          SizedBox(
+            height: 36,
+            child: ElevatedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.file_download_outlined, size: 16),
+              label: const Text("Export", style: TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.navy,
+                  foregroundColor: AppColors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10))),
+            ),
           ),
       ],
     );
@@ -371,17 +444,60 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildDropdown(null, selectedEmployee, employees, (v) => setState(() => selectedEmployee = v!)),
+                  _buildDropdown(
+                      null,
+                      selectedEmployeeId ?? "all",
+                      employees
+                          .map((e) => DropdownMenuItem<String>(
+                              value: e['id'], child: Text(e['name']!)))
+                          .toList(), (v) {
+                    setState(() {
+                      selectedEmployeeId = v;
+                      selectedEmployee = employees
+                          .firstWhere((e) => e['id'] == v)['name']!;
+                    });
+                  }),
                   const SizedBox(width: 8),
                   _buildDatePicker(),
                   const SizedBox(width: 8),
-                  _buildDropdown(null, selectedStatus, statuses, (v) => setState(() => selectedStatus = v!)),
+                  _buildDropdown(
+                      null,
+                      selectedStatus,
+                      statuses
+                          .map((s) => DropdownMenuItem<String>(
+                              value: s, child: Text(s)))
+                          .toList(),
+                      (v) => setState(() => selectedStatus = v!)),
                   const SizedBox(width: 8),
-                  _buildDropdown(null, selectedMonth, months, (v) => setState(() => selectedMonth = v!)),
+                  _buildDropdown(
+                      null,
+                      selectedMonth,
+                      months
+                          .map((m) => DropdownMenuItem<String>(
+                              value: m, child: Text(m)))
+                          .toList(),
+                      (v) => setState(() => selectedMonth = v!)),
                   const SizedBox(width: 12),
                   ElevatedButton(onPressed: _fetchAttendance, style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: AppColors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text("Search")),
                   const SizedBox(width: 8),
-                  OutlinedButton(onPressed: () { setState(() { selectedDate = null; selectedEmployee = "All Employees"; selectedStatus = "All Status"; selectedMonth = DateFormat('MMMM').format(DateTime.now()); searchController.clear(); }); _fetchAttendance(); }, style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), side: BorderSide(color: AppColors.grey200)), child: const Text("Clear")),
+                  OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          selectedDate = null;
+                          selectedEmployee = "All Employees";
+                          selectedEmployeeId = "all";
+                          selectedStatus = "All Status";
+                          selectedMonth =
+                              DateFormat('MMMM').format(DateTime.now());
+                          searchController.clear();
+                        });
+                        _fetchAttendance();
+                      },
+                      style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          side: BorderSide(color: AppColors.grey200)),
+                      child: const Text("Clear")),
                 ],
               ),
             ),
@@ -391,15 +507,21 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
     );
   }
 
-  Widget _buildDropdown(String? label, String value, List<String> items, void Function(String?) onChanged) {
+  Widget _buildDropdown(String? label, String value,
+      List<DropdownMenuItem<String>> items, void Function(String?) onChanged) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.grey100)),
+      decoration: BoxDecoration(
+          color: AppColors.offWhite,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.grey100)),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: value, isDense: true,
-          style: GoogleFonts.inter(color: AppColors.navy, fontSize: 13, fontWeight: FontWeight.w600),
-          items: items.map((String item) => DropdownMenuItem<String>(value: item, child: Text(item))).toList(),
+          value: value,
+          isDense: true,
+          style: GoogleFonts.inter(
+              color: AppColors.navy, fontSize: 13, fontWeight: FontWeight.w600),
+          items: items,
           onChanged: onChanged,
         ),
       ),
