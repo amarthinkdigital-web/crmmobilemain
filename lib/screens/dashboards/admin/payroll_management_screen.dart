@@ -60,9 +60,19 @@ class _PayrollManagementScreenState extends State<PayrollManagementScreen> {
           );
 
     if (response['error'] == false) {
-      final List data = (response['data'] is Map)
-          ? (response['data']['salaries'] ?? [])
-          : (response['data'] ?? []);
+      final dynamic rawData = response['data'];
+      List data = [];
+      if (rawData is List) {
+        data = rawData;
+      } else if (rawData is Map) {
+         if (rawData.containsKey('salaries') && rawData['salaries'] is List) {
+            data = rawData['salaries'];
+         } else if (rawData.containsKey('data') && rawData['data'] is List) {
+            data = rawData['data'];
+         } else {
+            data = rawData.values.firstWhere((v) => v is List, orElse: () => []) as List;
+         }
+      }
       setState(() {
         _salaries = data.map((json) => Salary.fromJson(json)).toList();
         _isLoading = false;

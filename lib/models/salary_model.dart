@@ -35,10 +35,10 @@ class Salary {
 
   factory Salary.fromJson(Map<String, dynamic> json) {
     return Salary(
-      id: json['id'],
-      userId: json['user_id'],
-      month: json['month'],
-      year: json['year'],
+      id: json['id'] is String ? int.tryParse(json['id']) : json['id'],
+      userId: json['user_id'] is String ? int.tryParse(json['user_id']) : json['user_id'],
+      month: json['month'] is String ? int.tryParse(json['month']) : json['month'],
+      year: json['year'] is String ? int.tryParse(json['year']) : json['year'],
       baseSalary: json['base_salary']?.toString(),
       netSalary: json['net_salary']?.toString(),
       status: json['status'],
@@ -77,6 +77,10 @@ class User {
   User({this.id, this.name, this.email});
 
   factory User.fromJson(Map<String, dynamic> json) {
-    return User(id: json['id'], name: json['name'], email: json['email']);
+    return User(
+      id: json['id'] is String ? int.tryParse(json['id']) : json['id'],
+      name: json['name'],
+      email: json['email'],
+    );
   }
 }

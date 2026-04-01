@@ -486,6 +486,7 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
                 Icons.visibility_outlined,
                 AppColors.info,
                 "View",
+                onTap: () => _showLeaveDetails(l),
               ),
               if (status == 'Pending') ...[
                 const SizedBox(width: 8),
@@ -493,12 +494,14 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
                   Icons.edit_outlined,
                   AppColors.goldDark,
                   "Edit",
+                  onTap: () {},
                 ),
                 const SizedBox(width: 8),
                 _buildActionIcon(
                   Icons.delete_outline_rounded,
                   AppColors.error,
                   "Delete",
+                  onTap: () {},
                 ),
               ],
             ],
@@ -553,9 +556,9 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
     );
   }
 
-  Widget _buildActionIcon(IconData icon, Color color, String tooltip) {
+  Widget _buildActionIcon(IconData icon, Color color, String tooltip, {required VoidCallback onTap}) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: Tooltip(
         message: tooltip,
         child: Container(
@@ -567,6 +570,103 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
           child: Icon(icon, size: 16, color: color),
         ),
       ),
+    );
+  }
+
+  void _showLeaveDetails(Map<String, dynamic> leave) {
+    String start = leave['start_date']?.toString() ?? leave['startDate']?.toString() ?? '-';
+    String end = leave['end_date']?.toString() ?? leave['endDate']?.toString() ?? '-';
+    String type = leave['leave_type'] ?? leave['type'] ?? leave['category'] ?? 'Leave';
+    String status = leave['status']?.toString() ?? 'Pending';
+    String reason = leave['reason'] ?? leave['description'] ?? 'No reason provided';
+    String remark = leave['remark'] ?? leave['admin_remark'] ?? 'No remark from admin yet.';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Leave Details",
+                      style: GoogleFonts.inter(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _buildDetailRow("Type", type),
+                const SizedBox(height: 12),
+                _buildDetailRow("Start Date", start),
+                const SizedBox(height: 12),
+                _buildDetailRow("End Date", end),
+                const SizedBox(height: 12),
+                _buildDetailRow("Status", status),
+                const SizedBox(height: 12),
+                const Divider(),
+                const SizedBox(height: 12),
+                Text("Reason", style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.grey400)),
+                const SizedBox(height: 4),
+                Text(reason, style: GoogleFonts.inter(fontSize: 14, color: AppColors.navy, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 16),
+                Text("Admin Remark", style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.grey400)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppColors.offWhite,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    remark,
+                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.navy, fontStyle: FontStyle.italic),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.navy,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text("Close", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.grey600)),
+        Text(value, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.navy)),
+      ],
     );
   }
 }

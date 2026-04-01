@@ -13,6 +13,25 @@ class ManagerSalaryScreen extends StatefulWidget {
 }
 
 class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
+  String _selectedMonth = DateTime.now().month.toString();
+  String _selectedYear = DateTime.now().year.toString();
+
+  final List<Map<String, String>> _months = [
+    {"id": "1", "name": "January"},
+    {"id": "2", "name": "February"},
+    {"id": "3", "name": "March"},
+    {"id": "4", "name": "April"},
+    {"id": "5", "name": "May"},
+    {"id": "6", "name": "June"},
+    {"id": "7", "name": "July"},
+    {"id": "8", "name": "August"},
+    {"id": "9", "name": "September"},
+    {"id": "10", "name": "October"},
+    {"id": "11", "name": "November"},
+    {"id": "12", "name": "December"},
+  ];
+  final List<String> _years = ["2023", "2024", "2025", "2026"];
+
   bool _isLoading = true;
   List<Salary> _salaries = [];
   String? _errorMessage;
@@ -29,11 +48,36 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
       _errorMessage = null;
     });
 
-    final response = await ApiService.getManagerSalaries();
+    final response = await ApiService.getManagerSalaries(
+      month: int.tryParse(_selectedMonth),
+      year: int.tryParse(_selectedYear),
+    );
     if (response['error'] == false) {
-      final List data = response['data'] ?? [];
+      final dynamic rawData = response['data'];
+      List data = [];
+      if (rawData is List) {
+        data = rawData;
+      } else if (rawData is Map) {
+         if (rawData.containsKey('salaries') && rawData['salaries'] is List) {
+            data = rawData['salaries'];
+         } else if (rawData.containsKey('data') && rawData['data'] is List) {
+            data = rawData['data'];
+         } else {
+            data = rawData.values.firstWhere((v) => v is List, orElse: () => []) as List;
+         }
+      }
       setState(() {
         _salaries = data.map((json) => Salary.fromJson(json)).toList();
+        
+        // Locally filter if backend returns all months
+        int m = int.tryParse(_selectedMonth) ?? 0;
+        int y = int.tryParse(_selectedYear) ?? 0;
+        if (m > 0 && y > 0) {
+          final filtered = _salaries.where((s) => s.month == m && s.year == y).toList();
+          if (filtered.isNotEmpty || (_salaries.isNotEmpty && _salaries.first.month != m && _salaries.length > 1)) {
+            _salaries = filtered;
+          }
+        }
         _isLoading = false;
       });
     } else {
@@ -85,6 +129,8 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildExecutiveHeader(),
+                    const SizedBox(height: 24),
+                    _buildFilterSection(),
                     const SizedBox(height: 32),
                     _buildExecutiveQuickStats(),
                     const SizedBox(height: 40),
@@ -124,6 +170,67 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
     );
   }
 
+  Widget _buildFilterSection() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildSmallDropdown(
+            _selectedMonth,
+            _months.map((m) => m['id']!).toList(),
+            (v) {
+              setState(() => _selectedMonth = v!);
+              _fetchSalaries();
+            },
+            labels: _months.map((m) => m['name']!).toList(),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildSmallDropdown(_selectedYear, _years, (v) {
+            setState(() => _selectedYear = v!);
+            _fetchSalaries();
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSmallDropdown(
+    String value,
+    List<String> items,
+    void Function(String?) onChanged, {
+    List<String>? labels,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.grey200),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isDense: true,
+          isExpanded: true,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          style: GoogleFonts.inter(
+            color: AppColors.navy,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          items: List.generate(items.length, (index) {
+            return DropdownMenuItem(
+              value: items[index],
+              child: Text(labels != null ? labels[index] : items[index]),
+            );
+          }),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
   Widget _buildExecutiveQuickStats() {
     final latest = _salaries.isNotEmpty ? _salaries.first : null;
     final monthName = latest != null
@@ -136,7 +243,7 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
       crossAxisCount: 2,
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
-      childAspectRatio: 1.4,
+      childAspectRatio: 1.15,
       children: [
         _buildManagerStatTile(
           "Leave Credits",
@@ -175,10 +282,10 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
     IconData icon,
   ) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.grey100),
         boxShadow: [
           BoxShadow(
