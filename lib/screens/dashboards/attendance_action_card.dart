@@ -160,7 +160,7 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
   Widget build(BuildContext context) {
     if (_isLoading && _todayRecord == null) {
       return Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),  
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(24),

@@ -714,15 +714,18 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> submitManagerLeave(
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    String? role,
+  }) async {
     try {
       final headers = await _headers();
+      final String label = (role?.toLowerCase().contains('hr') ?? false) ? 'HR' : 'Manager';
+      final bodyWithLabel = {...body, 'label': label, 'type_label': label};
       final response = await http
           .post(
             Uri.parse('$baseUrl/manager/leaves'),
             headers: headers,
-            body: jsonEncode(body),
+            body: jsonEncode(bodyWithLabel),
           )
           .timeout(const Duration(seconds: 10));
       final data = jsonDecode(response.body);
@@ -768,19 +771,31 @@ class ApiService {
   }) async {
     try {
       final headers = await _headers();
+      bool isReject = status.toLowerCase().contains('reject');
+      String action = isReject ? 'reject' : 'approve';
+
+      // Parse 'Approved Paid' or 'Approved Unpaid' to 'paid' or 'unpaid'
+      String finalType =
+          (status.toLowerCase().contains('unpaid') ||
+              (leaveType?.toLowerCase().contains('unpaid') ?? false))
+          ? 'unpaid'
+          : 'paid';
+
       final body = jsonEncode({
         'status': status,
         'leave_status': status,
         'leave': status,
         'id': id,
         'leave_id': id,
-        'leave_type': leaveType ?? 'Leave',
+        'leave_type': finalType,
+        'type_label': 'Employee', // Identifying as employee-layer request
+        'label': 'Employee',
         if (reason != null && reason.isNotEmpty) 'reject_reason': reason,
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       });
       final response = await http
           .post(
-            Uri.parse('$baseUrl/manager/team-leaves/$id/approve'),
+            Uri.parse('$baseUrl/manager/team-leaves/$id/$action'),
             headers: headers,
             body: body,
           )
@@ -799,21 +814,25 @@ class ApiService {
   static Future<Map<String, dynamic>> getAdminManagerLeaveRequests() async {
     try {
       final headers = await _headers();
-      // Using underscored route as requested/established in admin prefix
       final response = await http
           .get(
-            Uri.parse('$baseUrl/admin/manager/leave_requests'),
+            Uri.parse('$baseUrl/manager/manager-leave-requests'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
+      
       final data = jsonDecode(response.body);
-      if (response.statusCode == 200)
+      debugPrint('AdminManagerLeaveRequests response: ${response.statusCode} - ${response.body}');
+      
+      if (response.statusCode == 200) {
         return {'error': false, 'data': _extractList(data)};
+      }
       return {
         'error': true,
         'message': data['message'] ?? 'Failed to load manager leaves',
       };
     } catch (e) {
+      debugPrint('AdminManagerLeaveRequests Error: $e');
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
     }
   }
@@ -839,11 +858,12 @@ class ApiService {
       final body = jsonEncode({
         'leave_type': finalType,
         'type_label': 'Manager', // Backend uses this to distinguish models
+        'label': 'Manager',      // Adding redundant label field if required
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       });
       final response = await http
           .post(
-            Uri.parse('$baseUrl/admin/manager/leave_requests/$id/$action'),
+            Uri.parse('$baseUrl/manager/manager-leave-requests/$id/$action'),
             headers: headers,
             body: body,
           )
@@ -883,11 +903,12 @@ class ApiService {
   ) async {
     try {
       final headers = await _headers();
+      final bodyWithLabel = {...body, 'label': 'Employee', 'type_label': 'Employee'};
       final response = await http
           .post(
             Uri.parse('$baseUrl/employee/leaves'),
             headers: headers,
-            body: jsonEncode(body),
+            body: jsonEncode(bodyWithLabel),
           )
           .timeout(const Duration(seconds: 10));
       final data = jsonDecode(response.body);
@@ -930,18 +951,23 @@ class ApiService {
       final headers = await _headers();
       final response = await http
           .get(
-            Uri.parse('$baseUrl/admin/employee/leave_requests'),
+            Uri.parse('$baseUrl/employee/admin-leave-requests'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 15));
+      
       final data = jsonDecode(response.body);
-      if (response.statusCode == 200)
+      debugPrint('AdminEmployeeLeaveRequests response: ${response.statusCode} - ${response.body}');
+      
+      if (response.statusCode == 200) {
         return {'error': false, 'data': _extractList(data)};
+      }
       return {
         'error': true,
         'message': data['message'] ?? 'Failed to load employee leaves',
       };
     } catch (e) {
+      debugPrint('AdminEmployeeLeaveRequests Error: $e');
       return {'error': true, 'message': 'Network error: ${e.toString()}'};
     }
   }
@@ -951,6 +977,7 @@ class ApiService {
     String status, {
     String? leaveType,
     String? reason,
+    bool isAdmin = false,
   }) async {
     try {
       final headers = await _headers();
@@ -967,15 +994,21 @@ class ApiService {
       final body = jsonEncode({
         'leave_type': finalType,
         'type_label': 'Employee',
+        'label': 'Employee',
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       });
+      
+      // If isAdmin is true, use admin-leave-requests endpoint, else regular leave-requests (HR)
+      String endpoint = isAdmin ? 'admin-leave-requests' : 'leave-requests';
+      
       final response = await http
           .post(
-            Uri.parse('$baseUrl/admin/employee/leave_requests/$id/$action'),
+            Uri.parse('$baseUrl/employee/$endpoint/$id/$action'),
             headers: headers,
             body: body,
           )
           .timeout(const Duration(seconds: 10));
+          
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) return {'error': false, ...data};
       return {
@@ -3224,12 +3257,11 @@ class ApiService {
 
   // ─── Utilities ─────────────────────────────────────────────────────────────
   static List _extractList(dynamic data) {
+    if (data == null) return [];
     if (data is List) return data;
     if (data is Map) {
+      // Direct list check in top level
       if (data['data'] is List) return data['data'];
-      if (data['data'] is Map && data['data']['data'] is List) {
-        return data['data']['data'];
-      }
       if (data['tasks'] is List) return data['tasks'];
       if (data['leaves'] is List) return data['leaves'];
       if (data['manager_leaves'] is List) return data['manager_leaves'];
@@ -3238,25 +3270,35 @@ class ApiService {
         return data['manager_leave_requests'];
       if (data['employee_leave_requests'] is List)
         return data['employee_leave_requests'];
+      if (data['admin_leave_requests'] is List) // Added top level check
+        return data['admin_leave_requests'];
       if (data['applied_leaves'] is List) return data['applied_leaves'];
       if (data['leave_requests'] is List) return data['leave_requests'];
       if (data['all_leaves'] is List) return data['all_leaves'];
       if (data['items'] is List) return data['items'];
       if (data['requests'] is List) return data['requests'];
+      if (data['invoices'] is List) return data['invoices']; // Added for invoices
 
       if (data['data'] is Map) {
         final d = data['data'];
+        if (d['data'] is List) return d['data'];
         if (d['tasks'] is List) return d['tasks'];
         if (d['leaves'] is List) return d['leaves'];
         if (d['manager_leaves'] is List) return d['manager_leaves'];
         if (d['employee_leaves'] is List) return d['employee_leaves'];
+        if (d['admin_leave_requests'] is List) return d['admin_leave_requests'];
+        if (d['manager_leave_requests'] is List) return d['manager_leave_requests'];
         if (d['all_leaves'] is List) return d['all_leaves'];
         if (d['items'] is List) return d['items'];
-        if (d['data'] is List) return d['data'];
+        if (d['invoices'] is List) return d['invoices']; // Added for nested invoices
+        
+        // Fallback for nested map values
+        for (var entry in d.entries) {
+          if (entry.value is List) return entry.value;
+        }
       }
 
-      if (data['data'] is List) return data['data'];
-      // Fallback: look for first list in entries
+      // Check top level entry values
       for (var entry in data.entries) {
         if (entry.value is List) return entry.value;
       }

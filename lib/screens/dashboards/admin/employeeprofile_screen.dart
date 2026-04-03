@@ -24,6 +24,9 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
   final phoneController = TextEditingController();
   final roleController = TextEditingController();
   final locationController = TextEditingController();
+  final teamLeaderController = TextEditingController();
+  final managerController = TextEditingController();
+  final hrController = TextEditingController();
   String formDept = "Software Engineering";
 
   List<Map<String, dynamic>> employees = [];
@@ -80,6 +83,9 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
     phoneController.dispose();
     roleController.dispose();
     locationController.dispose();
+    teamLeaderController.dispose();
+    managerController.dispose();
+    hrController.dispose();
     super.dispose();
   }
 
@@ -120,11 +126,27 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
           '';
       final search = searchController.text.toLowerCase();
 
+      final tl = e['team_leader'];
+      final String tlStr = tl is Map
+          ? (tl['name'] ?? '${tl['first_name'] ?? ''} ${tl['last_name'] ?? ''}')
+          : (tl?.toString() ?? '');
+      final mgr = e['manager'];
+      final String mgrStr = mgr is Map
+          ? (mgr['name'] ?? '${mgr['first_name'] ?? ''} ${mgr['last_name'] ?? ''}')
+          : (mgr?.toString() ?? '');
+      final hrC = e['hr'];
+      final String hrStr = hrC is Map
+          ? (hrC['name'] ?? '${hrC['first_name'] ?? ''} ${hrC['last_name'] ?? ''}')
+          : (hrC?.toString() ?? '');
+
       bool matchSearch =
           nameStr.contains(search) ||
           emailStr.contains(search) ||
           idStr.contains(search) ||
-          roleStr.contains(search);
+          roleStr.contains(search) ||
+          tlStr.toLowerCase().contains(search) ||
+          mgrStr.toLowerCase().contains(search) ||
+          hrStr.toLowerCase().contains(search);
 
       String deptName = 'Unknown';
       if (e['department'] is Map) {
@@ -172,6 +194,9 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
         "status": "Active",
         "dept": formDept,
         "role": roleController.text,
+        "team_leader": teamLeaderController.text,
+        "manager": managerController.text,
+        "hr": hrController.text,
       });
       _clearForm();
     });
@@ -188,6 +213,9 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
     phoneController.clear();
     roleController.clear();
     locationController.clear();
+    teamLeaderController.clear();
+    managerController.clear();
+    hrController.clear();
   }
 
   void _showAddEmployeeSheet() {
@@ -300,6 +328,32 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                       "Location",
                       locationController,
                       Icons.location_on_outlined,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildInputField(
+                "Team Leader Name",
+                teamLeaderController,
+                Icons.supervised_user_circle_outlined,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildInputField(
+                      "Reporting Manager",
+                      managerController,
+                      Icons.supervisor_account_outlined,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildInputField(
+                      "HR Representative",
+                      hrController,
+                      Icons.person_search_outlined,
                     ),
                   ),
                 ],
@@ -426,14 +480,18 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  "Employee Profiles",
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.navy,
+                Expanded(
+                  child: Text(
+                    "Employee Profiles",
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: _showAddEmployeeSheet,
                   icon: const Icon(Icons.add_rounded, size: 18),
@@ -689,13 +747,24 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                           ),
                         ],
                       ),
-                      Text(
-                        "$roleStr • $deptName",
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppColors.grey600,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final leader = employee['team_leader'] ?? employee['manager'];
+                          final String tlName = leader != null
+                              ? (leader is Map
+                                  ? (leader['name'] ??
+                                      '${leader['first_name'] ?? ''} ${leader['last_name'] ?? ''}')
+                                  : leader.toString())
+                              : '';
+                          return Text(
+                            "$roleStr • $deptName${tlName.isNotEmpty ? ' • Supervisor: $tlName' : ''}",
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.grey600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -713,6 +782,41 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                 _buildInfoRow(Icons.phone_outlined, phoneStr),
                 const SizedBox(height: 8),
                 _buildInfoRow(Icons.location_on_outlined, locationStr),
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    final tl = employee['team_leader'];
+                    final mgr = employee['manager'];
+                    final hrC = employee['hr'];
+                    
+                    final String tlStr = tl != null
+                        ? (tl is Map ? (tl['name'] ?? '${tl['first_name'] ?? ''} ${tl['last_name'] ?? ''}') : tl.toString())
+                        : 'Not Assigned';
+                    final String mgrStr = mgr != null
+                        ? (mgr is Map ? (mgr['name'] ?? '${mgr['first_name'] ?? ''} ${mgr['last_name'] ?? ''}') : mgr.toString())
+                        : 'Not Assigned';
+                    final String hrStr = hrC != null
+                        ? (hrC is Map ? (hrC['name'] ?? '${hrC['first_name'] ?? ''} ${hrC['last_name'] ?? ''}') : hrC.toString())
+                        : 'Not Assigned';
+                    
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (tl != null && tlStr.isNotEmpty && tlStr != 'Not Assigned') ...[
+                          _buildInfoRow(Icons.supervised_user_circle_outlined, "TL: $tlStr"),
+                          const SizedBox(height: 6),
+                        ],
+                        if (mgr != null && mgrStr.isNotEmpty && mgrStr != 'Not Assigned') ...[
+                          _buildInfoRow(Icons.supervisor_account_outlined, "Mgr: $mgrStr"),
+                          const SizedBox(height: 6),
+                        ],
+                        if (hrC != null && hrStr.isNotEmpty && hrStr != 'Not Assigned') ...[
+                          _buildInfoRow(Icons.person_search_outlined, "HR: $hrStr"),
+                        ],
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -933,6 +1037,51 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                             thickness: 1,
                             color: AppColors.offWhite,
                           ),
+                          if (employee['team_leader'] != null) ...[
+                            _buildDetailRow(
+                              Icons.supervised_user_circle_outlined,
+                              'Team Leader',
+                              employee['team_leader'] is Map
+                                  ? (employee['team_leader']['name'] ??
+                                      '${employee['team_leader']['first_name'] ?? ''} ${employee['team_leader']['last_name'] ?? ''}')
+                                  : employee['team_leader'].toString(),
+                            ),
+                            const Divider(
+                              height: 24,
+                              thickness: 1,
+                              color: AppColors.offWhite,
+                            ),
+                          ],
+                          if (employee['manager'] != null && employee['manager'] != employee['team_leader']) ...[
+                            _buildDetailRow(
+                              Icons.business_center_outlined,
+                              'Reporting Manager',
+                              employee['manager'] is Map
+                                  ? (employee['manager']['name'] ??
+                                      '${employee['manager']['first_name'] ?? ''} ${employee['manager']['last_name'] ?? ''}')
+                                  : employee['manager'].toString(),
+                            ),
+                            const Divider(
+                              height: 24,
+                              thickness: 1,
+                              color: AppColors.offWhite,
+                            ),
+                          ],
+                          if (employee['hr'] != null) ...[
+                            _buildDetailRow(
+                              Icons.person_search_outlined,
+                              'HR Contact',
+                              employee['hr'] is Map
+                                  ? (employee['hr']['name'] ??
+                                      '${employee['hr']['first_name'] ?? ''} ${employee['hr']['last_name'] ?? ''}')
+                                  : employee['hr'].toString(),
+                            ),
+                            const Divider(
+                              height: 24,
+                              thickness: 1,
+                              color: AppColors.offWhite,
+                            ),
+                          ],
                           ...employee.entries
                               .where((e) {
                                 final kStr = e.key.toLowerCase();
@@ -951,6 +1100,12 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                                   'dept',
                                   'user_type',
                                   'role',
+                                  'team_leader',
+                                  'team_leader_id',
+                                  'manager',
+                                  'manager_id',
+                                  'hr',
+                                  'hr_id',
                                 ].contains(kStr))
                                   return false;
                                 if (e.value == null ||

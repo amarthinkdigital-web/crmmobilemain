@@ -76,14 +76,13 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
 
   int _getId(dynamic req) => req['id'] ?? req['leave_id'] ?? 0;
   String _getName(dynamic req) {
-    final e = req['team_leader'] ?? req['manager'] ?? req['user'];
+    if (req is! Map) return 'Unknown';
+    // Check various relation or direct fields
+    final e = req['team_leader'] ?? req['manager'] ?? req['user'] ?? req['staff'] ?? req['requester'];
     if (e is Map) {
-      return e['name'] ?? e['user_name'] ?? e['first_name'] ?? 'Unknown';
+      return e['name'] ?? e['full_name'] ?? e['user_name'] ?? e['first_name'] ?? 'Unknown';
     }
-    return e?.toString() ??
-        req['manager_name'] ??
-        req['user_name'] ??
-        'Unknown';
+    return req['manager_name'] ?? req['name'] ?? req['user_name'] ?? e?.toString() ?? 'Unknown';
   }
 
   String _getStart(dynamic req) =>
@@ -93,8 +92,16 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
   String _getType(dynamic req) =>
       req['leave_type'] ?? req['type'] ?? req['category'] ?? 'Leave';
   String _getStatus(dynamic req) => req['status']?.toString() ?? 'Pending';
-  String _getReason(dynamic req) =>
-      req['reason'] ?? req['description'] ?? 'No reason provided';
+  String _getReason(dynamic req) => req['reason'] ?? req['description'] ?? 'No reason provided';
+  
+  String _getRole(dynamic req) {
+    if (req is! Map) return 'Admin/Other';
+    final e = req['team_leader'] ?? req['manager'] ?? req['hr'] ?? req['user'] ?? req['requester'];
+    if (e is Map) {
+      return e['role'] ?? e['designation'] ?? e['role_name'] ?? 'Mgmt';
+    }
+    return req['role_name'] ?? req['role'] ?? 'Mgmt';
+  }
 
   bool _hasPaidLeaveThisMonth(Map<String, dynamic> req) {
     // For manager leaves, the requester is the manager/team_leader
@@ -255,12 +262,12 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
                   columnSpacing: 25,
                   columns: [
                     _buildDataColumn("ID"),
-                    _buildDataColumn("Manager"),
+                    _buildDataColumn("Manager / TL"),
+                    _buildDataColumn("Role"),
                     _buildDataColumn("Start"),
                     _buildDataColumn("End"),
                     _buildDataColumn("Type"),
                     _buildDataColumn("Status"),
-                    _buildDataColumn("Reason"),
                     _buildDataColumn("Action"),
                   ],
                   rows: _leaveRequests.map((req) => _buildRow(req)).toList(),
@@ -301,7 +308,13 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
             ),
           ),
         ),
-        DataCell(Text(_getStart(req), style: GoogleFonts.inter(fontSize: 12))),
+        DataCell(
+          Text(
+            _getRole(req),
+            style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600),
+          ),
+        ),
+        DataCell(Text(_getStart(req).split(' ')[0], style: GoogleFonts.inter(fontSize: 12))),
         DataCell(Text(_getEnd(req), style: GoogleFonts.inter(fontSize: 12))),
         DataCell(
           Container(
@@ -345,25 +358,13 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
           _getStatus(req).toLowerCase() == 'pending'
               ? Row(
                   children: [
-                    if (!_hasPaidLeaveThisMonth(req)) ...[
-                      _buildCompactActionButton(
-                        "Paid",
-                        AppColors.success,
-                        () => _updateStatus(
-                          _getId(req),
-                          'Approved Paid',
-                          _getType(req),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
                     _buildCompactActionButton(
-                      "Unpaid",
-                      AppColors.warning,
-                      () => _updateStatus(
+                      "Approve",
+                      AppColors.success,
+                      () => _showApproveDialog(
                         _getId(req),
-                        'Approved Unpaid',
                         _getType(req),
+                        req,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -401,6 +402,87 @@ class _ManagerLeavesScreenState extends State<ManagerLeavesScreen> {
             child: const Text("Close"),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showApproveDialog(int id, String initialType, Map<String, dynamic> req) {
+    String selectedType = initialType.toLowerCase().contains('unpaid') ? 'Unpaid' : 'Paid';
+    bool hasPaidAlready = _hasPaidLeaveThisMonth(req);
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(
+            "Approve Leave",
+            style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: AppColors.navy),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (hasPaidAlready) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "This user has already taken a paid leave this month.",
+                          style: GoogleFonts.inter(fontSize: 12, color: Colors.orange[800], fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              Text(
+                "Select Leave Type:",
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.grey600),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedType,
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                items: ["Paid", "Unpaid"].map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value, style: GoogleFonts.inter(fontSize: 14)),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => selectedType = val);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel", style: TextStyle(color: AppColors.grey600)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _updateStatus(id, 'Approved $selectedType', selectedType.toLowerCase());
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+              child: const Text("APPROVE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }

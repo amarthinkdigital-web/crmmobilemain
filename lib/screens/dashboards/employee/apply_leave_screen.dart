@@ -21,7 +21,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
   bool _isLoadingLeaves = true;
   List<Map<String, dynamic>> _myLeaves = [];
 
-  final List<String> _leaveTypes = ['Annual', 'Sick', 'Casual', 'Maternity', 'Paternity', 'Unpaid'];
+  final List<String> _leaveTypes = ['Paid Leave', 'Unpaid Leave'];
 
   @override
   void initState() {
@@ -58,7 +58,7 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
     }
     
     setState(() => _isSubmitting = true);
-    final String parsedLeaveType = _selectedLeaveType!.toLowerCase();
+    final String parsedLeaveType = _selectedLeaveType!.split(' ').first.toLowerCase();
 
     final payload = {
       'leave_type': parsedLeaveType,
@@ -444,6 +444,36 @@ class _ApplyLeaveScreenState extends State<ApplyLeaveScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.supervisor_account_outlined, size: 16, color: AppColors.grey400),
+              const SizedBox(width: 8),
+                Builder(
+                  builder: (context) {
+                    final emp = leave['employee'] ?? leave['user'];
+                    
+                    // Priority logic: Team Leader -> Reporting Manager -> HR Contact
+                    final dynamic approver = (emp is Map)
+                        ? (emp['team_leader'] ?? emp['manager'] ?? emp['hr'])
+                        : (leave['team_leader'] ?? leave['manager'] ?? leave['hr']);
+                    
+                    final String name = approver != null
+                        ? (approver is Map
+                            ? (approver['name'] ?? '${approver['first_name'] ?? ''} ${approver['last_name'] ?? ''}')
+                            : approver.toString())
+                        : 'HR / Admin Panel';
+                    
+                    return Expanded(
+                      child: Text(
+                        'Approver: $name',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600, fontWeight: FontWeight.w600),
+                      ),
+                    );
+                  },
+                ),
             ],
           ),
           const SizedBox(height: 8),

@@ -7,7 +7,8 @@ import '../../../services/auth_service.dart';
 import '../attendance_action_card.dart';
 
 class AdminDashboard extends StatefulWidget {
-  const AdminDashboard({super.key});
+  final Function(int)? onNavigate;
+  const AdminDashboard({super.key, this.onNavigate});
 
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
@@ -22,6 +23,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int _totalUsers = 1240;
   double _systemUptime = 99.98;
   double _monthlyRevenue = 14250.0;
+  int _pendingTeamApprovals = 0;
+  int _pendingEmployeeApprovals = 0;
+  int _pendingManagerLeaves = 0;
 
   final List<double> _revenueTrendData = [
     80.0,
@@ -51,24 +55,48 @@ class _AdminDashboardState extends State<AdminDashboard> {
       final results = await Future.wait([
         ApiService.getInvoices(),
         ApiService.getAdminTasks(),
+        ApiService.getAdminTeamApprovals(),
+        ApiService.getAdminEmployeeLeaveRequests(),
+        ApiService.getAdminManagerLeaveRequests(),
       ]);
 
       final invoiceRes = results[0];
+      final teamApprovalsRes = results[2];
+      final empApprovalsRes = results[3];
+      final managerLeavesRes = results[4];
 
       if (mounted) {
         setState(() {
           _userName = name;
           _userRole = role;
 
-          if (invoiceRes['error'] == false) {
-            final dynamic data = invoiceRes['data'];
-            List items = [];
-            if (data is List) {
-              items = data;
-            } else if (data is Map && data['data'] is List) {
-              items = data['data'];
-            }
+          // Process Team Approvals
+          if (teamApprovalsRes['error'] == false) {
+            final List items = teamApprovalsRes['data'] ?? [];
+            _pendingTeamApprovals = items.where((r) => 
+              (r['status'] ?? '').toString().toLowerCase().contains('pending')
+            ).length;
+          }
+          
+          // Process Employee Approvals
+          if (empApprovalsRes['error'] == false) {
+            final List items = empApprovalsRes['data'] ?? [];
+            _pendingEmployeeApprovals = items.where((r) => 
+              (r['status'] ?? '').toString().toLowerCase().contains('pending')
+            ).length;
+          }
 
+          // Process Manager Leaves
+          if (managerLeavesRes['error'] == false) {
+            final List items = managerLeavesRes['data'] ?? [];
+            _pendingManagerLeaves = items.where((r) => 
+              (r['status'] ?? '').toString().toLowerCase().contains('pending')
+            ).length;
+          }
+
+          // Process Invoices for revenue
+          if (invoiceRes['error'] == false) {
+            final List items = invoiceRes['data'] ?? [];
             _monthlyRevenue = items.fold(0.0, (sum, item) {
               final amount =
                   double.tryParse(item['total_amount']?.toString() ?? '0') ??
@@ -112,6 +140,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
             const AttendanceActionCard(),
             const SizedBox(height: 32),
             _buildSystemStats(),
+            const SizedBox(height: 32),
+            _buildSectionHeader(
+              "Quick Actions",
+              "Standard enterprise creation tools",
+            ),
+            const SizedBox(height: 16),
+            _buildQuickActions(context),
+            const SizedBox(height: 32),
+            _buildSectionHeader(
+              "Pending Approvals",
+              "Review and manage pending requests",
+            ),
+            const SizedBox(height: 16),
+            _buildApprovalCards(context),
             const SizedBox(height: 32),
             _buildSectionHeader(
               "Company Analytics",
@@ -601,6 +643,192 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    return Container(
+      height: 100,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        children: [
+          _buildQuickActionItem(
+            context,
+            "Invoice",
+            Icons.add_chart_rounded,
+            AppColors.success,
+            26, // Create Invoice index
+          ),
+          _buildQuickActionItem(
+            context,
+            "Task",
+            Icons.checklist_rounded,
+            AppColors.info,
+            31, // Task Tracking/Management index
+          ),
+          _buildQuickActionItem(
+            context,
+            "Event",
+            Icons.event_available_rounded,
+            Colors.deepPurple,
+            55, // Events & Meetings index
+          ),
+          _buildQuickActionItem(
+            context,
+            "Holiday",
+            Icons.beach_access_rounded,
+            AppColors.gold,
+            27, // Holiday Calendar index
+          ),
+          _buildQuickActionItem(
+            context,
+            "Dept",
+            Icons.domain_rounded,
+            AppColors.navy,
+            43, // Departments index
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionItem(
+    BuildContext context,
+    String label,
+    IconData icon,
+    Color color,
+    int targetIdx,
+  ) {
+    return InkWell(
+      onTap: () {
+        if (widget.onNavigate != null) widget.onNavigate!(targetIdx);
+      },
+      child: Container(
+        width: 85,
+        margin: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.grey100, width: 1.5),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.grey600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildApprovalCards(BuildContext context) {
+    return _buildDirectNavigationCard(
+      context,
+      "Team Approvals",
+      "Review management worksheets and tasks",
+      Icons.rule_folder_rounded,
+      AppColors.gold,
+      "Team Approvals",
+      9,
+      _pendingTeamApprovals,
+    );
+  }
+
+  Widget _buildDirectNavigationCard(
+    BuildContext context,
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    String routeName,
+    int targetIndex,
+    int pendingCount,
+  ) {
+    return InkWell(
+      onTap: () {
+        if (widget.onNavigate != null) {
+          widget.onNavigate!(targetIndex);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.grey100, width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
+                ),
+                if (pendingCount > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "$pendingCount New",
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: AppColors.grey400,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
