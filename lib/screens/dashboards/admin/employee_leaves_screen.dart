@@ -62,6 +62,7 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
       status,
       leaveType: leaveType,
       reason: reason,
+      isAdmin: true,
     );
     if (!mounted) return;
     if (res['error'] == false) {
@@ -78,21 +79,25 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
 
   int _getId(dynamic req) => req['id'] ?? req['leave_id'] ?? 0;
   String _getName(dynamic req) {
-    final e = req['employee'] ?? req['user'] ?? req['staff'];
+    if (req is! Map) return 'Unknown';
+    // Check various relation or direct fields
+    final e = req['employee'] ?? req['user'] ?? req['staff'] ?? req['requester'] ?? req['requested_by'];
     if (e is Map) {
-      return e['name'] ?? e['user_name'] ?? e['first_name'] ?? 'Unknown';
+      return e['name'] ?? e['full_name'] ?? e['user_name'] ?? e['first_name'] ?? 'Unknown';
     }
-    return e?.toString() ?? req['employee_name'] ?? 'Unknown';
+    return req['employee_name'] ?? req['name'] ?? req['user_name'] ?? e?.toString() ?? 'Unknown';
   }
 
   String _getRole(dynamic req) {
-    final e = req['employee'] ?? req['user'] ?? req['staff'];
+    if (req is! Map) return 'Staff';
+    final e = req['employee'] ?? req['user'] ?? req['staff'] ?? req['requester'];
     if (e is Map) {
       final dept = e['department'];
       if (dept is Map) return dept['name'] ?? 'Staff';
-      return e['role'] ?? e['designation'] ?? 'Staff';
+      String? role = e['role'] ?? e['designation'] ?? e['role_name'] ?? e['position'];
+      return role ?? 'Staff';
     }
-    return req['department_name'] ?? 'Staff';
+    return req['department_name'] ?? req['role_name'] ?? 'Staff';
   }
 
   String _getStart(dynamic req) =>
@@ -178,7 +183,7 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Employee Leaves',
+                'Staff Leave Records',
                 style: GoogleFonts.inter(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
@@ -187,7 +192,7 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
                 ),
               ),
               Text(
-                'Manage and review staff time-off requests officially',
+                'Official overview of organization-wide employee time-off',
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   color: AppColors.grey400,
@@ -269,7 +274,6 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
                     _buildDataColumn("Type"),
                     _buildDataColumn("Status"),
                     _buildDataColumn("Reason"),
-                    _buildDataColumn("Action"),
                   ],
                   rows: _leaveRequests.map((req) => _buildRow(req)).toList(),
                 ),
@@ -345,44 +349,11 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
             ),
           ),
         ),
-        DataCell(
-          _getStatus(req).toLowerCase() == 'pending'
-              ? Row(
-                  children: [
-                    if (!_hasPaidLeaveThisMonth(req)) ...[
-                      _buildCompactActionButton(
-                        "Paid",
-                        AppColors.success,
-                        () => _updateStatus(
-                          _getId(req),
-                          'Approved Paid',
-                          _getType(req),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    _buildCompactActionButton(
-                      "Unpaid",
-                      AppColors.warning,
-                      () => _updateStatus(
-                        _getId(req),
-                        'Approved Unpaid',
-                        _getType(req),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildCompactActionButton(
-                      "Reject",
-                      AppColors.error,
-                      () => _showRejectDialog(_getId(req), _getType(req)),
-                    ),
-                  ],
-                )
-              : const SizedBox.shrink(),
-        ),
       ],
     );
   }
+
+
 
   void _showRejectDialog(int id, String leaveType) {
     final TextEditingController reasonController = TextEditingController();
@@ -479,30 +450,4 @@ class _EmployeeLeavesScreenState extends State<EmployeeLeavesScreen> {
     );
   }
 
-  Widget _buildCompactActionButton(
-    String label,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
-      ),
-    );
-  }
 }

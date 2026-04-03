@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/api_service.dart';
+import '../../../services/auth_service.dart';
 
 class ManagerLeaveRequestScreen extends StatefulWidget {
   const ManagerLeaveRequestScreen({super.key});
@@ -63,7 +64,8 @@ class _ManagerLeaveRequestScreenState extends State<ManagerLeaveRequestScreen> {
       'reason': reasonController.text,
     };
 
-    final res = await ApiService.submitManagerLeave(payload);
+    final userRole = await AuthService.getUserRole();
+    final res = await ApiService.submitManagerLeave(payload, role: userRole);
     if (!mounted) return;
 
     if (res['error'] == false) {

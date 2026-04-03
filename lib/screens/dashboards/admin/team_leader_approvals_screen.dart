@@ -13,15 +13,13 @@ class TeamLeaderApprovalsScreen extends StatefulWidget {
 }
 
 class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
-  String selectedProject = "All Projects";
   String selectedStatus = "All Status";
   DateTime? selectedDate;
   final TextEditingController searchController = TextEditingController();
 
-  List<Map<String, dynamic>> _approvalRequests = [];
+  List<Map<String, dynamic>> _leaveRequests = [];
   bool _isLoading = true;
 
-  List<String> projects = ["All Projects"];
   final List<String> statuses = [
     "All Status",
     "Pending",
@@ -32,41 +30,41 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProjects();
     _fetchRequests();
   }
 
-  Future<void> _loadProjects({List<dynamic>? fallbackData}) async {
-    final res = await ApiService.getProjects(fallbackData: fallbackData);
-    if (res['error'] == false && res['data'] is List) {
-      if (mounted) {
-        setState(() {
-          final List<dynamic> data = res['data'];
-          final Set<String> names = {"All Projects"};
-          for (var item in data) {
-            final name = item['name']?.toString() ?? item['project_name']?.toString();
-            if (name != null) names.add(name);
-          }
-          projects = names.toList()..sort((a, b) => a == "All Projects" ? -1 : a.compareTo(b));
-          
-          if (!projects.contains(selectedProject)) {
-            selectedProject = "All Projects";
-          }
-        });
-      }
-    }
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchRequests() async {
     setState(() => _isLoading = true);
-    final res = await ApiService.getAdminTeamApprovals();
+    final results = await Future.wait([
+      ApiService.getAdminManagerLeaveRequests(),
+      ApiService.getAdminEmployeeLeaveRequests(),
+    ]);
+
     if (mounted) {
       setState(() {
-        if (res['error'] == false) {
-          _approvalRequests = List<Map<String, dynamic>>.from(res['data']);
-          // After fetching, try to refresh projects from this data
-          _loadProjects(fallbackData: _approvalRequests);
+        _leaveRequests.clear();
+        if (results[0]['error'] == false) {
+          final List<dynamic> mgrData = results[0]['data'];
+          _leaveRequests.addAll(mgrData.map((e) => {...Map<String, dynamic>.from(e), 'source_type': 'manager'}).toList());
         }
+        if (results[1]['error'] == false) {
+          final List<dynamic> empData = results[1]['data'];
+          _leaveRequests.addAll(empData.map((e) => {...Map<String, dynamic>.from(e), 'source_type': 'employee'}).toList());
+        }
+        
+        // Sort descending to show newest requests first
+        _leaveRequests.sort((a, b) {
+            final int idA = int.tryParse((a['id'] ?? '0').toString()) ?? 0;
+            final int idB = int.tryParse((b['id'] ?? '0').toString()) ?? 0;
+            return idB.compareTo(idA);
+        });
+        
         _isLoading = false;
       });
     }
@@ -74,15 +72,24 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _approvalRequests.where((req) {
-      final query = searchController.text.toLowerCase();
-      final emp = (req['user']?['name'] ?? req['user_name'] ?? req['employee'] ?? req['employee_name'] ?? '').toString().toLowerCase();
-      if (query.isNotEmpty && !emp.contains(query)) return false;
+    final filtered = _leaveRequests.where((req) {
+      // Management only Leave check
+      final userObj = req['user'] ?? req['employee'] ?? req['staff'] ?? {};
+      final String roleStr = (userObj is Map
+              ? (userObj['role'] ??
+                  userObj['designation'] ??
+                  userObj['role_name'] ??
+                  userObj['position'] ??
+                  '')
+              : '').toString().toLowerCase();
 
-      if (selectedProject != "All Projects") {
-        final proj = (req['project']?['name'] ?? req['project_name'] ?? req['project'] ?? '').toString();
-        if (proj != selectedProject) return false;
-      }
+      // Only HR/Managers
+      final bool isMgmt = roleStr.contains('hr') || roleStr.contains('manager');
+      if (!isMgmt) return false;
+
+      final query = searchController.text.toLowerCase();
+      final emp = (req['user_name'] ?? req['employee_name'] ?? req['user']?['name'] ?? '').toString().toLowerCase();
+      if (query.isNotEmpty && !emp.contains(query)) return false;
 
       if (selectedStatus != "All Status") {
         final status = (req['status'] ?? 'Pending').toString().toLowerCase();
@@ -90,18 +97,16 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
       }
 
       if (selectedDate != null) {
-        final dateStr = (req['work_date'] ?? req['workDate'] ?? req['date'] ?? '').toString();
-        final reqDate = DateTime.tryParse(dateStr);
-        if (reqDate != null) {
-          if (reqDate.year != selectedDate!.year || 
-              reqDate.month != selectedDate!.month || 
-              reqDate.day != selectedDate!.day) return false;
+        final start = DateTime.tryParse(req['start_date'] ?? '');
+        final end = DateTime.tryParse(req['end_date'] ?? '');
+        if (start != null && end != null) {
+           final bool within = (selectedDate!.isAfter(start) || selectedDate!.isAtSameMomentAs(start)) &&
+                               (selectedDate!.isBefore(end) || selectedDate!.isAtSameMomentAs(end));
+           if (!within) return false;
         }
       }
-
       return true;
     }).toList();
-    
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
@@ -114,14 +119,24 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
             const SizedBox(height: 24),
             _buildFilterSection(),
             const SizedBox(height: 24),
-            _isLoading 
-              ? const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
-              : filtered.isEmpty
-                  ? Center(child: Padding(padding: const EdgeInsets.all(40), child: Text("No approval requests found", style: GoogleFonts.inter(color: AppColors.grey400))))
-                  : _buildApprovalsTable(filtered),
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : filtered.isEmpty
+                    ? _buildEmptyState("No management leave requests found")
+                    : _buildLeavesTable(filtered),
             const SizedBox(height: 100),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String msg) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Text(msg,
+            style: GoogleFonts.inter(color: AppColors.grey400, fontSize: 13)),
       ),
     );
   }
@@ -131,7 +146,7 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "Team Leader Approvals",
+          "Team Approvals",
           style: GoogleFonts.inter(
             fontSize: 24,
             fontWeight: FontWeight.w800,
@@ -140,7 +155,7 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
           ),
         ),
         Text(
-          "Review and approve project tasks submitted by team leaders",
+          "Review management time-off requests",
           style: GoogleFonts.inter(
             fontSize: 14,
             color: AppColors.grey400,
@@ -166,20 +181,10 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
               controller: searchController,
               onChanged: (v) => setState(() {}),
               decoration: InputDecoration(
-                hintText: "Search employee by name...",
+                hintText: "Search management user...",
                 prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: searchController.text.isNotEmpty 
-                  ? IconButton(
-                      icon: const Icon(Icons.clear_rounded, size: 18),
-                      onPressed: () => setState(() => searchController.clear()),
-                    )
-                  : null,
                 filled: true,
                 fillColor: AppColors.offWhite,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -193,67 +198,10 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildDropdown(
-                    selectedProject,
-                    projects,
-                    (v) => setState(() => selectedProject = v!),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDropdown(
                     selectedStatus,
                     statuses,
                     (v) => setState(() => selectedStatus = v!),
                   ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      selectedProject = "All Projects";
-                      selectedStatus = "All Status";
-                      selectedDate = null;
-                      searchController.clear();
-                    });
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.navy,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    side: BorderSide(color: AppColors.grey200),
-                  ),
-                  child: const Text("Clear"),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: () {
-                    // Update filtering by triggering a rebuild
-                    setState(() {});
-                    // Also optionally re-fetch to see if new data arrived
-                    _fetchRequests();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.navy,
-                    foregroundColor: AppColors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text("Search"),
                 ),
               ],
             ),
@@ -263,34 +211,106 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
     );
   }
 
-  Widget _buildDropdown(
-    String value,
-    List<String> items,
-    void Function(String?) onChanged,
-  ) {
+  Widget _buildLeavesTable(List<Map<String, dynamic>> requests) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.offWhite,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.grey100),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          isDense: true,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          style: GoogleFonts.inter(
-            color: AppColors.navy,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
+      decoration: _tableDecoration(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(AppColors.navy.withValues(alpha: 0.05)),
+            columns: [
+              _buildDataColumn("Requester"),
+              _buildDataColumn("Start Date"),
+              _buildDataColumn("End Date"),
+              _buildDataColumn("Type"),
+              _buildDataColumn("Status"),
+              _buildDataColumn("Action"),
+            ],
+            rows: requests.map((req) => _buildLeaveRow(req)).toList(),
           ),
-          items: items
-              .map((i) => DropdownMenuItem(value: i, child: Text(i)))
-              .toList(),
-          onChanged: onChanged,
         ),
+      ),
+    );
+  }
+
+  BoxDecoration _tableDecoration() {
+    return BoxDecoration(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.grey200),
+    );
+  }
+
+  DataColumn _buildDataColumn(String label) {
+    return DataColumn(
+      label: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.navy)),
+    );
+  }
+
+  DataRow _buildLeaveRow(Map<String, dynamic> req) {
+    final status = (req['status'] ?? 'Pending').toString();
+    return DataRow(cells: [
+      DataCell(Text(req['user_name'] ?? req['employee_name'] ?? req['user']?['name'] ?? 'N/A', style: GoogleFonts.inter(fontWeight: FontWeight.bold))),
+      DataCell(Text(req['start_date'] ?? 'N/A')),
+      DataCell(Text(req['end_date'] ?? 'N/A')),
+      DataCell(Text((req['leave_type'] ?? 'N/A').toString().toUpperCase())),
+      DataCell(_buildStatusBadge(status)),
+      DataCell(_buildActions(req)),
+    ]);
+  }
+
+  Widget _buildStatusBadge(String status) {
+    final color = _getStatusColor(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
+      child: Text(status.toUpperCase(), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: color)),
+    );
+  }
+
+  Widget _buildActions(Map<String, dynamic> req) {
+    final status = (req['status'] ?? 'Pending').toString().toLowerCase();
+    return Row(
+      children: [
+        if (status.contains('pending')) ...[
+           _buildCompactButton(Icons.check_circle_outline, AppColors.success, () => _handleReview(req, 'Approved')),
+           const SizedBox(width: 8),
+           _buildCompactButton(Icons.cancel_outlined, AppColors.error, () => _handleReview(req, 'Rejected')),
+        ],
+        const SizedBox(width: 8),
+        _buildCompactButton(Icons.visibility_outlined, AppColors.navy, () => _showLeaveDetail(req)),
+      ],
+    );
+  }
+
+  Future<void> _handleReview(Map<String, dynamic> req, String status) async {
+    final id = req['id'] ?? 0;
+    final isEmployee = req['source_type'] == 'employee';
+    final leaveType = (req['leave_type'] ?? 'paid').toString();
+    
+    final res = isEmployee
+        ? await ApiService.setEmployeeLeaveStatus(id, status, leaveType: leaveType, isAdmin: true)
+        : await ApiService.setAdminManagerLeaveStatus(id, status);
+    
+    if (mounted) {
+      if (res['error'] == false) {
+        _fetchRequests();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Request $status successfully"), backgroundColor: AppColors.success));
+      } else {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: AppColors.error));
+      }
+    }
+  }
+
+  void _showLeaveDetail(Map<String, dynamic> req) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Leave Request Detail"),
+        content: Text(req['reason'] ?? 'No reason provided'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close"))],
       ),
     );
   }
@@ -315,282 +335,37 @@ class _TeamLeaderApprovalsScreenState extends State<TeamLeaderApprovalsScreen> {
         ),
         child: Row(
           children: [
-            const Icon(
-              Icons.calendar_month_rounded,
-              size: 16,
-              color: AppColors.navy,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                selectedDate == null
-                    ? "Work Date"
-                    : DateFormat('dd MMM, yyyy').format(selectedDate!),
-                style: GoogleFonts.inter(
-                  color: AppColors.navy,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            const Icon(Icons.calendar_month_rounded, size: 16, color: AppColors.navy),
+            const SizedBox(width: 8),
+            Text(selectedDate == null ? "Select Date" : DateFormat('dd MMM, yyyy').format(selectedDate!),
+                 style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildApprovalsTable(List<Map<String, dynamic>> requests) {
+  Widget _buildDropdown(String value, List<String> items, void Function(String?) onChanged) {
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.grey200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            headingRowColor: WidgetStateProperty.all(
-              AppColors.navy.withValues(alpha: 0.05),
-            ),
-            columnSpacing: 30,
-            columns: [
-              _buildDataColumn("Employee"),
-              _buildDataColumn("Work Date"),
-              _buildDataColumn("Project"),
-              _buildDataColumn("Leader"),
-              _buildDataColumn("Points"),
-              _buildDataColumn("Status"),
-              _buildDataColumn("Action"),
-            ],
-            rows: requests.map((req) => _buildRow(req)).toList(),
-          ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.grey100)),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value, items: items.map((i) => DropdownMenuItem(value: i, child: Text(i))).toList(),
+          onChanged: onChanged, isExpanded: true, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
         ),
-      ),
-    );
-  }
-
-  DataColumn _buildDataColumn(String label) {
-    return DataColumn(
-      label: Text(
-        label,
-        style: GoogleFonts.inter(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.navy,
-        ),
-      ),
-    );
-  }
-
-  DataRow _buildRow(Map<String, dynamic> req) {
-    String employee = req['user']?['name'] ?? req['user_name'] ?? req['employee'] ?? req['employee_name'] ?? 'N/A';
-    String workDate = req['work_date'] ?? req['workDate'] ?? req['date'] ?? '-';
-    String project = req['project']?['name'] ?? req['project_name'] ?? (req['project'] is String ? req['project'] : 'N/A');
-    String leader = req['leader']?['name'] ?? req['leader_name'] ?? req['leader'] ?? req['team_leader'] ?? req['manager_name'] ?? 'N/A';
-    String status = req['status']?.toString() ?? 'Pending';
-    String points = req['points']?.toString() ?? '0';
-    
-    final statusColor = _getStatusColor(status);
-
-    return DataRow(
-      cells: [
-        DataCell(
-          Text(
-            employee,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.navy,
-            ),
-          ),
-        ),
-        DataCell(
-          Text(
-            workDate,
-            style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600),
-          ),
-        ),
-        DataCell(
-          Text(
-            project,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.navy,
-            ),
-          ),
-        ),
-        DataCell(
-          Text(
-            leader,
-            style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600),
-          ),
-        ),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.gold.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              "$points pts",
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: AppColors.goldDark,
-              ),
-            ),
-          ),
-        ),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              status,
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: statusColor,
-              ),
-            ),
-          ),
-        ),
-        DataCell(
-          Row(
-            children: [
-              if (status == 'Pending') ...[
-                _buildCompactButton(
-                  Icons.check_circle_outline_rounded,
-                  AppColors.success,
-                  () => _reviewRequest(req, 'Approved'),
-                ),
-                const SizedBox(width: 8),
-                _buildCompactButton(
-                  Icons.cancel_outlined,
-                  AppColors.error,
-                  () => _reviewRequest(req, 'Rejected'),
-                ),
-                const SizedBox(width: 8),
-              ],
-                _buildCompactButton(
-                  Icons.visibility_outlined,
-                  AppColors.navy,
-                  () => _showViewDialog(req),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _reviewRequest(Map<String, dynamic> req, String status) async {
-    int id = req['id'] ?? 0;
-    final res = await ApiService.reviewTeamWorksheet(id, {'status': status});
-    if (mounted) {
-      if (res['error'] == false) {
-        _fetchRequests();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Request $status"), backgroundColor: AppColors.success));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: AppColors.error));
-      }
-    }
-  }
-
-  void _showViewDialog(Map<String, dynamic> req) {
-    String employee = req['user']?['name'] ?? req['user_name'] ?? req['employee'] ?? req['employee_name'] ?? 'N/A';
-    String workDate = req['work_date'] ?? req['workDate'] ?? req['date'] ?? '-';
-    String project = req['project']?['name'] ?? req['project_name'] ?? (req['project'] is String ? req['project'] : 'N/A');
-    String leader = req['leader']?['name'] ?? req['leader_name'] ?? req['leader'] ?? req['team_leader'] ?? req['manager_name'] ?? 'N/A';
-    String status = req['status']?.toString() ?? 'Pending';
-    String points = req['points']?.toString() ?? '0';
-    String workDone = req['todays_work'] ?? req['work_done'] ?? req['description'] ?? '-';
-    String nextStep = req['next_step'] ?? '-';
-    String priority = req['priority']?.toString() ?? '-';
-    String remark = req['remark'] ?? req['review_comment'] ?? req['comment'] ?? '-';
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text("Approval Request Details", style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: AppColors.navy)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDetailItem("Employee", employee),
-              _buildDetailItem("Work Date", workDate),
-              _buildDetailItem("Project", project),
-              _buildDetailItem("Leader / Reporting Manager", leader),
-              _buildDetailItem("Status", status),
-              _buildDetailItem("Points Awarded", points),
-              _buildDetailItem("Work Done", workDone, isMultiLine: true),
-              _buildDetailItem("Next Step", nextStep, isMultiLine: true),
-              _buildDetailItem("Priority", priority),
-              _buildDetailItem("Review Remarks", remark, isMultiLine: true),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Close", style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppColors.navy)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(String label, String value, {bool isMultiLine = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.grey400)),
-          const SizedBox(height: 4),
-          Text(value, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.navy)),
-          if (isMultiLine) const Divider(height: 20, thickness: 0.5),
-        ],
       ),
     );
   }
 
   Widget _buildCompactButton(IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, size: 18, color: color),
-      ),
-    );
+    return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle), child: Icon(icon, size: 18, color: color)));
   }
 
   Color _getStatusColor(String status) {
     status = status.toLowerCase();
     if (status.contains('approved')) return AppColors.success;
     if (status.contains('rejected')) return AppColors.error;
-    return AppColors.warning; // Pending
+    return AppColors.warning;
   }
 }

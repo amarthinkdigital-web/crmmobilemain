@@ -54,6 +54,8 @@ import 'dashboards/manager/modules/support_tickets_screen.dart';
 import 'dashboards/admin/payroll_management_screen.dart';
 import 'dashboards/admin/events_meetings_screen.dart';
 
+import 'dashboards/manager/manager_team_leaves_screen.dart';
+
 class DashboardScreen extends StatefulWidget {
   final String userName;
   final String userEmail;
@@ -154,6 +156,11 @@ class _DashboardScreenState extends State<DashboardScreen>
           'isSub': true,
         },
         {
+          'name': 'Employee Approvals',
+          'icon': Icons.time_to_leave_rounded,
+          'isSub': true,
+        },
+        {
           'name': 'Business Operations',
           'icon': Icons.business_center_rounded,
           'isHeader': true,
@@ -218,7 +225,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           'isSub': true,
         },
         {
-          'name': 'Team Leader Approvals',
+          'name': 'Team Approvals',
           'icon': Icons.rule_folder_rounded,
           'isSub': true,
         },
@@ -238,9 +245,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           'isSub': true,
         },
         {'name': 'Recruitment', 'icon': Icons.person_search_rounded},
-        {'name': 'Approvals', 'icon': Icons.approval_rounded, 'isHeader': true},
-        {'name': 'Employee Leaves', 'icon': Icons.hail_rounded, 'isSub': true},
-        {'name': 'Manager Leaves', 'icon': Icons.badge_rounded, 'isSub': true},
         {
           'name': 'Services Management',
           'icon': Icons.settings_input_component_rounded,
@@ -554,7 +558,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (role == 'manager') {
       return ManagerIndividualDashboard(userName: widget.userName);
     } else if (role == 'admin') {
-      return const AdminDashboard();
+      return AdminDashboard(
+        onNavigate: (idx) {
+          if (mounted) setState(() => _selectedDashboardIndex = idx);
+        },
+      );
     } else {
       return EmployeeDashboard(userName: widget.userName);
     }
@@ -595,9 +603,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             : const TaskManagementScreen();
 
       case 'Apply for Leave':
-        return role == 'manager'
-            ? const ManagerLeaveRequestScreen()
-            : const ApplyLeaveScreen();
+        final String lowerRole = role.toLowerCase();
+        final bool isMgmt = lowerRole.contains('manager') ||
+            lowerRole.contains('leader') ||
+            lowerRole.contains('hr') ||
+            lowerRole.contains('admin');
+        return isMgmt ? const ManagerLeaveRequestScreen() : const ApplyLeaveScreen();
 
       case 'My Salary':
         return role == 'manager'
@@ -616,14 +627,20 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       case 'Team Worksheets':
         return const ManagerTeamWorksheetsScreen();
+      case 'Employee Approvals':
+        return role == 'manager'
+            ? const ManagerTeamLeavesScreen()
+            : const EmployeeLeavesScreen(); // Default
 
       case 'Recruitment':
         return const RecruitmentScreen();
 
       case 'Employee Leaves':
+      case 'Staff Leave Data':
         return const EmployeeLeavesScreen();
 
       case 'Manager Leaves':
+      case 'Manager Approvals':
         return const ManagerLeavesScreen();
 
       case 'Service Domains':
@@ -676,7 +693,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         return const AttendanceCorrectionsScreen();
       case 'All Daily Worksheets':
         return const AllDailyWorksheetsScreen();
-      case 'Team Leader Approvals':
+      case 'Team Approvals':
         return const TeamLeaderApprovalsScreen();
       case 'Payroll Management':
         return const PayrollManagementScreen();
