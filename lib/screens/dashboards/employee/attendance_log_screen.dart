@@ -35,9 +35,61 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     _fetchLogs();
   }
 
+  List<Map<String, dynamic>> get _filteredLogs {
+    return _logs.where((log) {
+      try {
+        final dateRaw = log['date']?.toString() ?? '';
+        final date = DateTime.parse(dateRaw).toLocal();
+
+        if (_selectedMonth != null && _selectedMonth != 'All') {
+          final logMonth = DateFormat('MMMM').format(date);
+          if (logMonth != _selectedMonth) return false;
+        }
+
+        if (_selectedYear != null && _selectedYear != 'All') {
+          if (date.year.toString() != _selectedYear) return false;
+        }
+
+        if (_selectedStatus != null && _selectedStatus != 'All') {
+          final status = (log['attendance_status']?.toString() ?? '').toLowerCase();
+          final isLate = log['is_late'] == 1 || log['is_late'] == true;
+          final isActive = log['clock_out'] == null;
+          String computedStatus = status;
+          if (computedStatus.isEmpty) {
+            if (isLate) { computedStatus = 'late'; }
+            else if (isActive) { computedStatus = 'working'; }
+            else { computedStatus = 'present'; }
+          }
+          final filterStatus = _selectedStatus!.toLowerCase();
+          if (filterStatus == 'half day' && !computedStatus.contains('half')) { return false; }
+          else if (filterStatus == 'on leave' && !computedStatus.contains('leave')) { return false; }
+          else if (filterStatus != 'half day' && filterStatus != 'on leave' && !computedStatus.contains(filterStatus)) { return false; }
+        }
+
+        return true;
+      } catch (_) {
+        return true;
+      }
+    }).toList();
+  }
+
   Future<void> _fetchLogs() async {
     setState(() => _isLoading = true);
-    final res = await ApiService.getMyAttendance();
+
+    int month = 1;
+    try {
+      final date = DateFormat('MMMM').parse(_selectedMonth ?? DateFormat('MMMM').format(DateTime.now()));
+      month = date.month;
+    } catch (_) {
+      month = DateTime.now().month;
+    }
+    
+    int year = DateTime.now().year;
+    try {
+      year = int.parse(_selectedYear ?? DateTime.now().year.toString());
+    } catch (_) {}
+
+    final res = await ApiService.getMyAttendance(month: month, year: year);
     if (mounted) {
       if (res['error'] == false) {
         setState(() {
@@ -175,9 +227,15 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
       children: [
         Row(
           children: [
-            Expanded(child: _buildDropdown(_months, _selectedMonth, (v) => setState(() => _selectedMonth = v))),
+            Expanded(child: _buildDropdown(_months, _selectedMonth, (v) {
+              setState(() => _selectedMonth = v);
+              _fetchLogs();
+            })),
             const SizedBox(width: 12),
-            Expanded(child: _buildDropdown(_years, _selectedYear, (v) => setState(() => _selectedYear = v))),
+            Expanded(child: _buildDropdown(_years, _selectedYear, (v) {
+              setState(() => _selectedYear = v);
+              _fetchLogs();
+            })),
           ],
         ),
         const SizedBox(height: 12),
@@ -213,7 +271,10 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
 
   Widget _buildLogList() {
     if (_isLoading) return const Center(child: CircularProgressIndicator(color: AppColors.navy));
-    if (_logs.isEmpty) {
+
+    final filtered = _filteredLogs;
+
+    if (filtered.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40.0),
@@ -223,7 +284,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     }
 
     return Column(
-      children: _logs.map((log) {
+      children: filtered.map((log) {
         final dateRaw = log['date']?.toString() ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
         final date = DateTime.parse(dateRaw).toLocal();
         

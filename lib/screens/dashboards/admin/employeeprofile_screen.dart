@@ -160,10 +160,10 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
           selectedDepartment == "All Departments" ||
           deptName == selectedDepartment;
 
-      String statusStr = e['status']?.toString() ?? 'Active';
+      String statusStr = e['employee_status']?.toString() ?? e['status']?.toString() ?? 'Active';
       bool matchStatus =
           selectedStatus == "All" ||
-          statusStr.toLowerCase() == selectedStatus.toLowerCase();
+          statusStr.toLowerCase().contains(selectedStatus.toLowerCase().replaceAll(' ', ''));
 
       String locStr =
           e['location']?.toString() ?? e['state']?.toString() ?? 'N/A';
@@ -664,7 +664,7 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
         employee['role']?.toString() ??
         employee['designation']?.toString() ??
         'Employee';
-    final String statusStr = employee['status']?.toString() ?? 'Active';
+    String statusStr = employee['employee_status']?.toString() ?? employee['status']?.toString() ?? 'Active';
 
     final statusColor = _getStatusColor(statusStr);
 
@@ -830,18 +830,14 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // Status Dropdown
+                _buildEmployeeStatusDropdown(employee),
                 _buildActionButton(
                   Icons.visibility_outlined,
                   "View",
                   () => _showEmployeeDetails(employee),
-                ),
-                const SizedBox(width: 10),
-                _buildActionButton(
-                  Icons.edit_outlined,
-                  "Edit",
-                  () {}, // Future implementation
                 ),
               ],
             ),
@@ -901,6 +897,96 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
     );
   }
 
+  static const List<String> _statusOptions = [
+    'Active',
+    'Terminate',
+    'Resigned',
+    'On Hold',
+  ];
+
+  Future<void> _updateEmployeeStatus(
+    Map<String, dynamic> employee,
+    String newStatus,
+  ) async {
+    final id = employee['id'];
+    if (id == null) return;
+
+    final res = await ApiService.updateEmployeeProfileStatus(
+      int.parse(id.toString()),
+      newStatus,
+    );
+
+    if (!mounted) return;
+
+    if (res['error'] == false) {
+      setState(() {
+        final idx = employees.indexOf(employee);
+        if (idx != -1) {
+          employees[idx]['status'] = newStatus;
+          employees[idx]['employee_status'] = newStatus;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Status updated to $newStatus'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Failed to update status'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Widget _buildEmployeeStatusDropdown(Map<String, dynamic> employee) {
+    final currentStatus = employee['employee_status']?.toString() ?? employee['status']?.toString() ?? 'Active';
+    final statusColor = _getStatusColor(currentStatus);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _statusOptions.contains(currentStatus) ? currentStatus : _statusOptions[0],
+          isDense: true,
+          icon: Icon(Icons.arrow_drop_down_rounded, color: statusColor, size: 18),
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: statusColor,
+          ),
+          items: _statusOptions.map((s) {
+            final c = _getStatusColor(s);
+            return DropdownMenuItem<String>(
+              value: s,
+              child: Text(
+                s,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: c,
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (newStatus) {
+            if (newStatus != null && newStatus != currentStatus) {
+              _updateEmployeeStatus(employee, newStatus);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   void _showEmployeeDetails(Map<String, dynamic> employee) {
     final String firstName = employee['first_name']?.toString() ?? '';
     final String lastName = employee['last_name']?.toString() ?? '';
@@ -921,7 +1007,7 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
       deptName = employee['dept'].toString();
     }
 
-    final String statusStr = employee['status']?.toString() ?? 'Active';
+    final String statusStr = employee['employee_status']?.toString() ?? employee['status']?.toString() ?? 'Active';
 
     showDialog(
       context: context,

@@ -311,7 +311,7 @@ class _BusinessLeadsScreenState extends State<BusinessLeadsScreen> {
       backgroundColor: AppColors.offWhite,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.navy, size: 20),
-        onPressed: () => Navigator.pop(context),
+        onPressed: () => Navigator.maybePop(context),
       ),
       title: Text(
         "All Leads",

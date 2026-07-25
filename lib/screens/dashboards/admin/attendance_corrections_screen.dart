@@ -30,18 +30,42 @@ class _AttendanceCorrectionsScreenState
 
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
-    final res = await ApiService.getAdminCorrections(status: 'pending');
-    final historyRes = await ApiService.getAdminCorrections(status: 'approved');
+
+    // Load pending separately and all statuses combined for history tab
+    final results = await Future.wait([
+      ApiService.getAdminCorrections(status: 'pending'),
+      ApiService.getAdminCorrections(status: 'approved'),
+      ApiService.getAdminCorrections(status: 'rejected'),
+    ]);
 
     if (mounted) {
+      final List<dynamic> pending = [];
+      final List<dynamic> history = [];
+
+      for (int i = 0; i < results.length; i++) {
+        final res = results[i];
+        if (res['error'] == false && res['data'] is List) {
+          final list = res['data'] as List;
+          if (i == 0) {
+            pending.addAll(list);
+          } else {
+            history.addAll(list);
+          }
+        }
+      }
+
+      // Sort history: approved first, then rejected
+      history.sort((a, b) {
+        const order = {'approved': 0, 'rejected': 1};
+        final aO = order[a['status']?.toString() ?? 'approved'] ?? 99;
+        final bO = order[b['status']?.toString() ?? 'approved'] ?? 99;
+        return aO.compareTo(bO);
+      });
+
       setState(() {
         _isLoading = false;
-        if (res['error'] == false) {
-          _pendingRequests = res['data'] ?? [];
-        }
-        if (historyRes['error'] == false) {
-          _historyRequests = historyRes['data'] ?? [];
-        }
+        _pendingRequests = pending;
+        _historyRequests = history;
       });
     }
   }
@@ -216,11 +240,7 @@ class _AttendanceCorrectionsScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    req['user']?['name'] ??
-                        req['employee']?['name'] ??
-                        req['user_name'] ??
-                        req['employee_name'] ??
-                        "Request #${req['id']}",
+                    _getEmployeeName(req),
                     style: GoogleFonts.inter(
                       fontWeight: FontWeight.w800,
                       color: AppColors.navy,
@@ -374,6 +394,17 @@ class _AttendanceCorrectionsScreenState
         ],
       ),
     );
+  }
+
+  String _getEmployeeName(dynamic req) {
+    final user = req['user'] ?? req['employee'] ?? {};
+    final fname = user['first_name']?.toString() ?? '';
+    final lname = user['last_name']?.toString() ?? '';
+    if (fname.isNotEmpty) return '$fname $lname'.trim();
+    return user['name']?.toString() ??
+        req['employee_name']?.toString() ??
+        req['user_name']?.toString() ??
+        'Request #${req['id']}';
   }
 
   Widget _buildInfoColumn(String label, String value) {

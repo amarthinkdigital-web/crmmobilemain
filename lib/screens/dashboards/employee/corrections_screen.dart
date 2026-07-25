@@ -208,7 +208,7 @@ class _CorrectionsScreenState extends State<CorrectionsScreen> {
                         child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.w800, fontSize: 10)),
                      )),
                      DataCell(Text(req['admin_remark'] ?? "-")),
-                     DataCell(Text(req['created_at'] != null ? DateFormat('MMM dd').format(DateTime.tryParse(req['created_at']) ?? DateTime.now()) : "N/A")),
+                     DataCell(Text(req['created_at'] != null ? DateFormat('MMM dd').format((DateTime.tryParse(req['created_at']) ?? DateTime.now()).toLocal()) : "N/A")),
                   ]);
                 }).toList(),
               ),

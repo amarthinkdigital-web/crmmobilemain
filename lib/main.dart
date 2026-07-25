@@ -4,6 +4,7 @@ import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/auth_service.dart';
+import 'services/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,15 @@ class _CRMAppState extends State<CRMApp> {
   Future<void> _checkAuth() async {
     final token = await AuthService.getToken();
     if (token != null) {
+      // Verify account status is still active
+      final profileRes = await ApiService.getUserProfile();
+      final profileUser = profileRes['user'] as Map<String, dynamic>? ?? {};
+      final accountStatus = (profileUser['status'] ?? '').toString().toLowerCase();
+      if (accountStatus == 'terminate' || accountStatus == 'terminated' || accountStatus == 'resigned') {
+        await AuthService.clearAuth();
+        return;
+      }
+
       final name = await AuthService.getUserName();
       final email = await AuthService.getUserEmail();
       final role = await AuthService.getUserRole();

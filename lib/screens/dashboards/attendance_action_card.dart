@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../services/api_service.dart';
@@ -13,17 +15,40 @@ class AttendanceActionCard extends StatefulWidget {
   State<AttendanceActionCard> createState() => _AttendanceActionCardState();
 }
 
-class _AttendanceActionCardState extends State<AttendanceActionCard> {
+class _AttendanceActionCardState extends State<AttendanceActionCard>
+    with WidgetsBindingObserver {
   static const String officeWiFiName = "Airtel_Think Digital";
 
   bool _isLoading = true;
   Map<String, dynamic>? _todayRecord;
   String _status = "Loading...";
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchStatus();
+    // Auto-refresh every 30 seconds so that if clock-in happens on web,
+    // the mobile app picks it up automatically without manual restart.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _fetchStatus();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When app comes back to foreground, immediately re-fetch status
+    if (state == AppLifecycleState.resumed) {
+      _fetchStatus();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchStatus() async {
@@ -60,7 +85,9 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
         (_todayRecord!['break_in'] != null &&
             _todayRecord!['break_out'] == null) ||
         (_todayRecord!['break_in_1'] != null &&
-            _todayRecord!['break_out_1'] == null);
+            _todayRecord!['break_out_1'] == null) ||
+        (_todayRecord!['break_in_2'] != null &&
+            _todayRecord!['break_out_2'] == null);
 
     if (onBreak) {
       _status = "On Break";
@@ -103,6 +130,17 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
   }
 
   Future<bool> _checkWiFiConnection() async {
+    if (kIsWeb) return true; // Bypass on Web
+
+    // Bypass on Desktop (Windows/Mac/Linux) since permission_handler might fail
+    try {
+      if (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux) {
+        return true;
+      }
+    } catch (_) {}
+
     try {
       // 1. Request location permission (required on Android to get SSID)
       var status = await Permission.locationWhenInUse.status;
@@ -117,22 +155,35 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
         return false;
       }
 
-      // 2. Get WiFi name
+      // 2. Get WiFi name and IP
       final info = NetworkInfo();
       String? wifiName = await info.getWifiName();
+      String? wifiIP = await info.getWifiIP();
 
       // Clean the name (Android often wraps in quotes)
       String cleanWifi = wifiName?.replaceAll('"', '') ?? '';
 
-      print("DEBUG: Retreived SSID: $cleanWifi"); // Helpful for debugging
+      print(
+        "DEBUG: Retreived SSID: $cleanWifi, IP: $wifiIP",
+      ); // Helpful for debugging
 
-      if (cleanWifi.toLowerCase() == officeWiFiName.toLowerCase() ||
+      // ✅ Check if connected to office WiFi (by SSID name)
+      bool isOfficeWifi =
+          cleanWifi.toLowerCase() == officeWiFiName.toLowerCase() ||
           cleanWifi == officeWiFiName ||
           cleanWifi == "Office_WiFi" ||
-          cleanWifi.contains("Think Digital")) {
+          cleanWifi.contains("Think Digital");
+
+      // ✅ Also allow if IP is in the office subnet (192.168.1.x)
+      bool isOfficeSubnet =
+          wifiIP != null && wifiIP.startsWith('192.168.1.');
+
+      if (isOfficeWifi || isOfficeSubnet) {
+        // Connected to office WiFi — allow clock-in
         return true;
       }
 
+      // ❌ Not on office WiFi — show error and block
       String errorTxt =
           "Clock In failed! Please connect to '$officeWiFiName' WiFi.";
       if (cleanWifi.isEmpty || cleanWifi == "<unknown ssid>") {
@@ -160,7 +211,7 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
   Widget build(BuildContext context) {
     if (_isLoading && _todayRecord == null) {
       return Container(
-        padding: const EdgeInsets.all(24),  
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(24),
@@ -185,7 +236,9 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
           (_todayRecord!['break_in'] != null &&
               _todayRecord!['break_out'] == null) ||
           (_todayRecord!['break_in_1'] != null &&
-              _todayRecord!['break_out_1'] == null);
+              _todayRecord!['break_out_1'] == null) ||
+          (_todayRecord!['break_in_2'] != null &&
+              _todayRecord!['break_out_2'] == null);
     }
 
     return Container(
@@ -253,6 +306,14 @@ class _AttendanceActionCardState extends State<AttendanceActionCard> {
                       strokeWidth: 2,
                       color: AppColors.navy,
                     ),
+                  )
+                else
+                  IconButton(
+                    onPressed: _fetchStatus,
+                    icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.navy),
+                    tooltip: 'Refresh status',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                   ),
               ],
             ),

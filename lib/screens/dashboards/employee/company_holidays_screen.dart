@@ -313,10 +313,10 @@ class _CompanyHolidaysScreenState extends State<CompanyHolidaysScreen> {
           return DateFormat('dd/MM/yyyy').parse(dateStr.split(' ').first);
         }
       } else {
-        return DateTime.tryParse(dateStr);
+        return DateTime.tryParse(dateStr)?.toLocal();
       }
     } catch (e) {
-      return DateTime.tryParse(dateStr);
+      return DateTime.tryParse(dateStr)?.toLocal();
     }
   }
 

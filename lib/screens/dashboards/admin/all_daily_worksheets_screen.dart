@@ -12,232 +12,500 @@ class AllDailyWorksheetsScreen extends StatefulWidget {
       _AllDailyWorksheetsScreenState();
 }
 
-class _AllDailyWorksheetsScreenState extends State<AllDailyWorksheetsScreen> {
-  String selectedProject = "All Projects";
-  String selectedPriority = "All Priorities";
-  DateTime? selectedDate = DateTime.now();
+class _AllDailyWorksheetsScreenState extends State<AllDailyWorksheetsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   final TextEditingController searchController = TextEditingController();
+  DateTime? selectedDate;
 
-  List<Map<String, dynamic>> _allWorksheets = [];
-  bool _isLoading = true;
+  final Map<int, List<Map<String, dynamic>>> _tabData = {};
+  final Map<int, bool> _tabLoading = {};
+  final Map<int, int> _tabPage = {};
+  final Map<int, bool> _tabHasMore = {};
+  int _reviewingId = -1;
 
-  final List<String> projects = [
-    "All Projects",
-    "CRM Development",
-    "Marketing Campaign",
-    "Mobile App",
-    "Infrastructure",
-  ];
-  final List<String> priorities = [
-    "All Priorities",
-    "High",
-    "Medium",
-    "Low",
-    "Urgent",
+  static const _tabs = [
+    _TabDef(label: 'All', endpoint: 'tl-index'),
+    _TabDef(label: 'Pending', endpoint: 'tl-pending'),
+    _TabDef(label: 'Approved', endpoint: 'tl-approved'),
+    _TabDef(label: 'Rejected', endpoint: 'tl-rejected'),
   ];
 
   @override
   void initState() {
     super.initState();
-    _fetchWorksheets();
+    _tabController = TabController(length: _tabs.length, vsync: this);
+    for (var i = 0; i < _tabs.length; i++) {
+      _tabData[i] = [];
+      _tabLoading[i] = false;
+      _tabPage[i] = 1;
+      _tabHasMore[i] = true;
+    }
+    _tabController.addListener(_onTabChange);
+    _fetchTab(0);
   }
 
-  Future<void> _fetchWorksheets() async {
-    setState(() => _isLoading = true);
-    final res = await ApiService.getAdminDailyWorksheets();
+  @override
+  void dispose() {
+    _tabController.removeListener(_onTabChange);
+    _tabController.dispose();
+    searchController.dispose();
+    super.dispose();
+  }
+
+  void _onTabChange() {
+    if (!_tabController.indexIsChanging) return;
+    final idx = _tabController.index;
+    if (_tabData[idx]!.isEmpty && !_tabLoading[idx]!) {
+      _fetchTab(idx);
+    }
+  }
+
+  Future<void> _fetchTab(int tabIndex, {bool reset = false}) async {
+    if (reset) {
+      _tabPage[tabIndex] = 1;
+      _tabHasMore[tabIndex] = true;
+      _tabData[tabIndex] = [];
+    }
+    if (!_tabHasMore[tabIndex]! && !reset) return;
+
+    setState(() => _tabLoading[tabIndex] = true);
+
+    final res = await ApiService.getAdminDailyWorksheetsByEndpoint(
+      _tabs[tabIndex].endpoint,
+      name: searchController.text.isNotEmpty ? searchController.text : null,
+      workDate: selectedDate != null
+          ? DateFormat('yyyy-MM-dd').format(selectedDate!)
+          : null,
+    );
+
     if (mounted) {
       setState(() {
         if (res['error'] == false) {
-          _allWorksheets = List<Map<String, dynamic>>.from(res['data']);
+          final List<dynamic> fetched = res['data'];
+          if (reset) {
+            _tabData[tabIndex] = List<Map<String, dynamic>>.from(fetched);
+          } else {
+            _tabData[tabIndex]!.addAll(List<Map<String, dynamic>>.from(fetched));
+          }
+          _tabHasMore[tabIndex] = fetched.length >= 20;
+          if (!reset) _tabPage[tabIndex] = (_tabPage[tabIndex] ?? 1) + 1;
         }
-        _isLoading = false;
+        _tabLoading[tabIndex] = false;
       });
-      if (res['error'] == true) {
+      if (res['error'] == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message'] ?? 'Failed to load worksheets'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text(res['message'] ?? 'Failed to load'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
-  }
-
-  Map<String, List<Map<String, dynamic>>> _groupWorksheetsByDate() {
-    Map<String, List<Map<String, dynamic>>> grouped = {};
-    for (var ws in _allWorksheets) {
-      String date = ws['work_date'] ?? ws['workdate'] ?? 'Unknown';
-      if (!grouped.containsKey(date)) {
-        grouped[date] = [];
-      }
-      grouped[date]!.add(ws);
-    }
-    
-    // Sort keys (dates) descending
-    var sortedKeys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
-    Map<String, List<Map<String, dynamic>>> sortedGrouped = {};
-    for (var key in sortedKeys) {
-      sortedGrouped[key] = grouped[key]!;
-    }
-    return sortedGrouped;
   }
 
   @override
   Widget build(BuildContext context) {
-    final groupedLogs = _groupWorksheetsByDate();
-
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 24),
-            _buildFilterSection(),
-            const SizedBox(height: 24),
-            _isLoading 
-              ? const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
-              : groupedLogs.isEmpty
-                  ? Center(child: Padding(padding: const EdgeInsets.all(40), child: Text("No worksheets found", style: GoogleFonts.inter(color: AppColors.grey400))))
-                  : Column(
-                      children: groupedLogs.entries.map(
-                        (entry) => _buildDailyTableSection(entry.key, entry.value),
-                      ).toList(),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "TL Worksheets",
+                  style: GoogleFonts.inter(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.navy,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Team leader daily worksheet submissions",
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.grey400,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildFilterBar(),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.grey200),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: false,
+                    labelColor: AppColors.navy,
+                    unselectedLabelColor: AppColors.grey400,
+                    labelStyle: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
                     ),
-            const SizedBox(height: 100),
-          ],
-        ),
+                    unselectedLabelStyle: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    indicatorColor: AppColors.navy,
+                    indicatorWeight: 3,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    dividerColor: Colors.transparent,
+                    tabs: _tabs.asMap().entries.map((e) {
+                      final idx = e.key;
+                      final count = _tabData[idx]?.length ?? 0;
+                      return Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(e.value.label),
+                            if (count > 0) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: _getTabColor(idx)
+                                      .withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: _getTabColor(idx),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: List.generate(_tabs.length, (idx) {
+                return _buildTabContent(idx);
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Color _getTabColor(int idx) {
+    switch (idx) {
+      case 0:
+        return AppColors.navy;
+      case 1:
+        return AppColors.warning;
+      case 2:
+        return AppColors.success;
+      case 3:
+        return AppColors.error;
+      default:
+        return AppColors.navy;
+    }
+  }
+
+  Widget _buildFilterBar() {
+    return Row(
       children: [
-        Text(
-          "All Daily Worksheets",
-          style: GoogleFonts.inter(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: AppColors.navy,
-            letterSpacing: -0.5,
+        Expanded(
+          flex: 3,
+          child: TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              hintText: "Search by name...",
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              filled: true,
+              fillColor: AppColors.white,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppColors.grey200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppColors.grey200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.navy, width: 1.5),
+              ),
+            ),
+            onSubmitted: (_) => _refreshAll(),
           ),
         ),
-        Text(
-          "Monitor daily productivity and task updates across all teams",
-          style: GoogleFonts.inter(
-            fontSize: 14,
+        const SizedBox(width: 10),
+        InkWell(
+          onTap: () async {
+            final date = await showDatePicker(
+              context: context,
+              initialDate: selectedDate ?? DateTime.now(),
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2030),
+            );
+            if (date != null) {
+              setState(() => selectedDate = date);
+              _refreshAll();
+            }
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.grey200),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.calendar_today_rounded,
+                    size: 16,
+                    color: selectedDate != null
+                        ? AppColors.navy
+                        : AppColors.grey400),
+                const SizedBox(width: 8),
+                Text(
+                  selectedDate == null
+                      ? "Date"
+                      : DateFormat('dd MMM').format(selectedDate!),
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selectedDate != null
+                        ? AppColors.navy
+                        : AppColors.grey400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (selectedDate != null || searchController.text.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: () {
+              setState(() {
+                selectedDate = null;
+                searchController.clear();
+              });
+              _refreshAll();
+            },
+            icon: const Icon(Icons.close_rounded, size: 20),
             color: AppColors.grey400,
-            fontWeight: FontWeight.w500,
+            tooltip: 'Clear filters',
           ),
-        ),
+        ],
       ],
     );
   }
 
-  Widget _buildFilterSection() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: AppColors.grey100),
+  void _refreshAll() {
+    for (var i = 0; i < _tabs.length; i++) {
+      _fetchTab(i, reset: true);
+    }
+  }
+
+  Widget _buildTabContent(int tabIndex) {
+    if (_tabLoading[tabIndex]! && _tabData[tabIndex]!.isEmpty) {
+      return const Center(
+          child: Padding(
+              padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
+    }
+    if (_tabData[tabIndex]!.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.inbox_rounded, size: 48, color: AppColors.grey200),
+              const SizedBox(height: 12),
+              Text(
+                "No ${_tabs[tabIndex].label.toLowerCase()} worksheets",
+                style: GoogleFonts.inter(
+                    fontSize: 15, color: AppColors.grey400),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _fetchTab(tabIndex, reset: true),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 100),
+        itemCount: _tabData[tabIndex]!.length + 1,
+        itemBuilder: (context, index) {
+          if (index == _tabData[tabIndex]!.length) {
+            if (_tabLoading[tabIndex]!) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (_tabHasMore[tabIndex]!) {
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: TextButton(
+                    onPressed: () => _fetchTab(tabIndex),
+                    child: Text("Load more",
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          }
+          final log = _tabData[tabIndex]![index];
+          return _buildWorksheetCard(log, tabIndex);
+        },
+      ),
+    );
+  }
+
+  Widget _buildWorksheetCard(Map<String, dynamic> log, int tabIndex) {
+    final userName =
+        log['user']?['name'] ?? log['user_name'] ?? 'N/A';
+    final workDate = log['work_date'] ?? '';
+    final approvalStatus = log['approval_status']?.toString() ?? 'pending';
+    final items = log['items'] as List? ?? [];
+    final projectName = items.isNotEmpty
+        ? (items[0]['project_name'] ??
+            items[0]['project']?['name'] ??
+            'Project')
+        : 'N/A';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.grey200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Expanded(
-                  flex: 3,
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: (v) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: "Search employee name...",
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      filled: true,
-                      fillColor: AppColors.offWhite,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AppColors.navy.withValues(alpha: 0.1),
+                  child: Text(
+                    userName.isNotEmpty ? userName[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.navy,
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(flex: 2, child: _buildDatePicker()),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
                 Expanded(
-                  child: _buildDropdown(
-                    selectedProject,
-                    projects,
-                    (v) => setState(() => selectedProject = v!),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        userName,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        workDate,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppColors.grey400,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildDropdown(
-                    selectedPriority,
-                    priorities,
-                    (v) => setState(() => selectedPriority = v!),
-                  ),
-                ),
+                _buildApprovalBadge(approvalStatus),
               ],
             ),
-            const SizedBox(height: 16),
+            if (items.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.offWhite,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.folder_rounded,
+                        size: 15, color: AppColors.navy.withValues(alpha: 0.5)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        projectName,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.navy,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      selectedProject = "All Projects";
-                      selectedPriority = "All Priorities";
-                      selectedDate = DateTime.now();
-                      searchController.clear();
-                    });
-                  },
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text("Reset"),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.navy,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    side: BorderSide(color: AppColors.grey200),
-                  ),
+                _buildActionBtn(
+                  "View",
+                  Icons.visibility_outlined,
+                  AppColors.navy,
+                  () => _showViewDialog(log),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _fetchWorksheets,
-                  icon: const Icon(Icons.search_rounded, size: 18),
-                  label: const Text("Search"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.navy,
-                    foregroundColor: AppColors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
+                if (approvalStatus == 'pending' ||
+                    tabIndex == 1) ...[
+                  const SizedBox(width: 8),
+                  _buildActionBtn(
+                    "Review",
+                    Icons.rate_review_outlined,
+                    AppColors.success,
+                    () => _showReviewDialog(log),
                   ),
-                ),
+                ],
               ],
             ),
           ],
@@ -246,448 +514,73 @@ class _AllDailyWorksheetsScreenState extends State<AllDailyWorksheetsScreen> {
     );
   }
 
-  Widget _buildDropdown(
-    String value,
-    List<String> items,
-    void Function(String?) onChanged,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-      decoration: BoxDecoration(
-        color: AppColors.offWhite,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.grey100),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          isDense: true,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          style: GoogleFonts.inter(
-            color: AppColors.navy,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-          items: items
-              .map((i) => DropdownMenuItem(value: i, child: Text(i)))
-              .toList(),
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDatePicker() {
-    return InkWell(
-      onTap: () async {
-        final date = await showDatePicker(
-          context: context,
-          initialDate: selectedDate ?? DateTime.now(),
-          firstDate: DateTime(2020),
-          lastDate: DateTime(2030),
-        );
-        if (date != null) setState(() => selectedDate = date);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.offWhite,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.grey100),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.calendar_today_rounded,
-              size: 16,
-              color: AppColors.navy,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                selectedDate == null
-                    ? "Select Date"
-                    : DateFormat('dd MMM, yyyy (EEEE)').format(selectedDate!),
-                style: GoogleFonts.inter(
-                  color: AppColors.navy,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDailyTableSection(
-    String dateStr,
-    List<Map<String, dynamic>> logs,
-  ) {
-    DateTime date;
-    try {
-      date = DateTime.parse(dateStr).toLocal();
-    } catch (e) {
-      date = DateTime.now();
-    }
-    final String formattedDate = DateFormat('dd MMMM, yyyy').format(date);
-    final String dayName = DateFormat('EEEE').format(date);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 24, bottom: 12),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.history_toggle_off_rounded,
-                color: AppColors.gold,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Text(
-                "$formattedDate - $dayName",
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.navy,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.grey200),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(
-                  AppColors.navy.withValues(alpha: 0.05),
-                ),
-                columnSpacing: 40,
-                columns: [
-                  _buildDataColumn("Sr. No."),
-                  _buildDataColumn("User"),
-                  _buildDataColumn("Role"),
-                  _buildDataColumn("Project"),
-                  _buildDataColumn("Status"),
-                  _buildDataColumn("Leader"),
-                  _buildDataColumn("Points"),
-                  _buildDataColumn("Actions"),
-                ],
-                rows: logs.asMap().entries.map((entry) {
-                   final idx = entry.key;
-                   final log = entry.value;
-                   return _buildRow(idx + 1, log);
-                }).toList(),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  DataColumn _buildDataColumn(String label) {
-    return DataColumn(
-      label: Text(
-        label,
-        style: GoogleFonts.inter(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.navy,
-        ),
-      ),
-    );
-  }
-
-  DataRow _buildRow(int srNo, Map<String, dynamic> log) {
-    String userName = log['user']?['name'] ?? log['user_name'] ?? log['user'] ?? 'N/A';
-    String userRole = log['user']?['role'] ?? log['role'] ?? 'N/A';
-    String project = log['project']?['name'] ?? log['project_name'] ?? log['project'] ?? 'N/A';
-    String status = log['status']?.toString() ?? 'Pending';
-    String leader = log['leader']?['name'] ?? log['leader_name'] ?? log['leader'] ?? 'N/A';
-    String points = log['points']?.toString() ?? '-';
-
-    return DataRow(
-      cells: [
-        DataCell(
-          Text(srNo.toString(), style: GoogleFonts.inter(fontSize: 13)),
-        ),
-        DataCell(
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: AppColors.navy.withValues(alpha: 0.1),
-                child: Text(
-                  userName.isNotEmpty ? userName[0] : '?',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.navy,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                userName,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.navy,
-                ),
-              ),
-            ],
-          ),
-        ),
-        DataCell(
-          Text(
-            userRole,
-            style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600),
-          ),
-        ),
-        DataCell(
-          Text(
-            project,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.navy,
-            ),
-          ),
-        ),
-        DataCell(_buildStatusBadge(status)),
-        DataCell(
-          Text(
-            leader,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.navy,
-            ),
-          ),
-        ),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.gold.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              "$points pts",
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: AppColors.goldDark,
-              ),
-            ),
-          ),
-        ),
-        DataCell(
-          Row(
-            children: [
-              _buildCompactButton(
-                "View",
-                Icons.visibility_outlined,
-                AppColors.navy,
-                () => _showViewDialog(log),
-              ),
-              const SizedBox(width: 8),
-              _buildCompactButton(
-                "Review",
-                Icons.rate_review_outlined,
-                AppColors.success,
-                () {
-                   _showReviewDialog(log);
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showReviewDialog(Map<String, dynamic> log) {
-    final pointsController = TextEditingController(text: log['points']?.toString() ?? '');
-    final commentController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Review Worksheet", style: GoogleFonts.inter(fontWeight: FontWeight.w800)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: pointsController,
-              decoration: const InputDecoration(labelText: "Points Awarded"),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: commentController,
-              decoration: const InputDecoration(labelText: "Review Comment"),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
-              int id = log['id'] ?? 0;
-              final res = await ApiService.reviewAdminWorksheet(id, {
-                'points': int.tryParse(pointsController.text) ?? 0,
-                'comment': commentController.text,
-              });
-              if (mounted) {
-                Navigator.pop(context);
-                if (res['error'] == false) {
-                  _fetchWorksheets();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Review submitted"), backgroundColor: AppColors.success));
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: AppColors.error));
-                }
-              }
-            },
-            child: const Text("Submit"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showViewDialog(Map<String, dynamic> log) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Worksheet Details",
-            style: GoogleFonts.inter(fontWeight: FontWeight.w800)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDetailItem(
-                  "User", log['user']?['name'] ?? log['user_name'] ?? 'N/A'),
-              _buildDetailItem(
-                  "Role", log['user']?['role'] ?? log['role'] ?? 'N/A'),
-              _buildDetailItem("Project",
-                  log['project']?['name'] ?? log['project_name'] ?? 'N/A'),
-              _buildDetailItem("Work Date", log['work_date'] ?? '-'),
-              _buildDetailItem("Work Done", log['todays_work'] ?? '-',
-                  isMultiLine: true),
-              _buildDetailItem("Status", log['status']?.toString() ?? 'Pending'),
-              _buildDetailItem(
-                  "Priority", log['priority']?.toString() ?? 'Medium'),
-              _buildDetailItem("Next Step", log['next_step'] ?? '-',
-                  isMultiLine: true),
-              if (log['review_comment'] != null)
-                _buildDetailItem("Review Comment", log['review_comment'],
-                    isMultiLine: true),
-              _buildDetailItem("Points", log['points']?.toString() ?? '0'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Close")),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(String label, String value,
-      {bool isMultiLine = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.grey400)),
-          const SizedBox(height: 4),
-          Text(value,
-              style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.navy)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(String status) {
-    Color color = AppColors.info;
+  Widget _buildApprovalBadge(String status) {
+    Color color;
+    String label;
     String s = status.toLowerCase();
-    if (s.contains("completed")) color = AppColors.success;
-    if (s.contains("pending")) color = AppColors.warning;
+    if (s == 'approved') {
+      color = AppColors.success;
+      label = 'Approved';
+    } else if (s == 'rejected') {
+      color = AppColors.error;
+      label = 'Rejected';
+    } else {
+      color = AppColors.warning;
+      label = 'Pending';
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        status,
-        style: GoogleFonts.inter(
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            s == 'approved'
+                ? Icons.check_circle_rounded
+                : (s == 'rejected'
+                    ? Icons.cancel_rounded
+                    : Icons.schedule_rounded),
+            size: 12,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildCompactButton(
-    String label,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
+  Widget _buildActionBtn(
+      String label, IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           border: Border.all(color: color.withValues(alpha: 0.3)),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 14, color: color),
             const SizedBox(width: 4),
             Text(
               label,
               style: GoogleFonts.inter(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: color,
               ),
@@ -697,4 +590,380 @@ class _AllDailyWorksheetsScreenState extends State<AllDailyWorksheetsScreen> {
       ),
     );
   }
+
+  void _showViewDialog(Map<String, dynamic> log) {
+    final items = log['items'] as List? ?? [];
+    final otherWork = log['other_work']?.toString() ?? '';
+    final feedback = log['leader_comment']?.toString() ?? '';
+    final userName =
+        log['user']?['name'] ?? log['user_name'] ?? 'N/A';
+    final workDate = log['work_date'] ?? '-';
+    final approvalStatus = log['approval_status']?.toString() ?? 'pending';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: AppColors.navy.withValues(alpha: 0.1),
+              child: Text(
+                userName.isNotEmpty ? userName[0].toUpperCase() : '?',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.navy),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("TL Worksheet",
+                      style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w800, fontSize: 16)),
+                  Text(userName,
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.grey400)),
+                ],
+              ),
+            ),
+            _buildApprovalBadge(approvalStatus),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow("Work Date", workDate),
+              if (items.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text("Projects",
+                    style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy)),
+                const SizedBox(height: 8),
+                ...items.map((p) => Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.offWhite,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border(
+                            left: BorderSide(
+                                color: AppColors.navy.withValues(alpha: 0.4),
+                                width: 3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p['project_name'] ??
+                                p['project']?['name'] ??
+                                'Project',
+                            style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: AppColors.navy),
+                          ),
+                          if (p['todays_work']
+                                  ?.toString()
+                                  .isNotEmpty ==
+                              true) ...[
+                            const SizedBox(height: 6),
+                            Text("Today's Work:",
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.grey400)),
+                            Text(p['todays_work'].toString(),
+                                style:
+                                    GoogleFonts.inter(fontSize: 12)),
+                          ],
+                          if ((p['next_step'] ?? p['next_plan'])
+                                  ?.toString()
+                                  .isNotEmpty ==
+                              true) ...[
+                            const SizedBox(height: 6),
+                            Text("Next Step:",
+                                style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.grey400)),
+                            Text(
+                                (p['next_step'] ?? p['next_plan'])
+                                    .toString(),
+                                style:
+                                    GoogleFonts.inter(fontSize: 12)),
+                          ],
+                        ],
+                      ),
+                    )),
+              ],
+              if (otherWork.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _buildDetailRow("Other Work", otherWork),
+              ],
+              if (feedback.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _buildDetailRow("Leader Comment", feedback),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReviewDialog(Map<String, dynamic> log) {
+    String selectedStatus = 'approved';
+    final commentController = TextEditingController();
+    final id = log['id'] ?? 0;
+    final userName =
+        log['user']?['name'] ?? log['user_name'] ?? 'User';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text("Review Worksheet",
+              style: GoogleFonts.inter(fontWeight: FontWeight.w800)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.infoBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        color: AppColors.info, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Reviewing: $userName",
+                        style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.info),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text("Decision",
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.grey400)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setDialogState(
+                          () => selectedStatus = 'approved'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: selectedStatus == 'approved'
+                              ? AppColors.success.withValues(alpha: 0.15)
+                              : AppColors.offWhite,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: selectedStatus == 'approved'
+                                ? AppColors.success
+                                : AppColors.grey200,
+                            width:
+                                selectedStatus == 'approved' ? 2 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle_rounded,
+                                size: 18,
+                                color: selectedStatus == 'approved'
+                                    ? AppColors.success
+                                    : AppColors.grey400),
+                            const SizedBox(width: 6),
+                            Text(
+                              "Approve",
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: selectedStatus == 'approved'
+                                    ? AppColors.success
+                                    : AppColors.grey400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setDialogState(
+                          () => selectedStatus = 'rejected'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: selectedStatus == 'rejected'
+                              ? AppColors.error.withValues(alpha: 0.15)
+                              : AppColors.offWhite,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: selectedStatus == 'rejected'
+                                ? AppColors.error
+                                : AppColors.grey200,
+                            width:
+                                selectedStatus == 'rejected' ? 2 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.cancel_rounded,
+                                size: 18,
+                                color: selectedStatus == 'rejected'
+                                    ? AppColors.error
+                                    : AppColors.grey400),
+                            const SizedBox(width: 6),
+                            Text(
+                              "Reject",
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: selectedStatus == 'rejected'
+                                    ? AppColors.error
+                                    : AppColors.grey400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: commentController,
+                decoration: InputDecoration(
+                  labelText: "Comment",
+                  hintText: "Add your feedback",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: _reviewingId == id
+                  ? null
+                  : () async {
+                      setState(() => _reviewingId = id);
+                      final res = await ApiService.reviewAdminWorksheet(
+                        id,
+                        {
+                          'approval_status': selectedStatus,
+                          'leader_comment': commentController.text,
+                        },
+                      );
+                      if (mounted) {
+                        setState(() => _reviewingId = -1);
+                        Navigator.pop(ctx);
+                        if (res['error'] == false) {
+                          _refreshAll();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Review submitted"),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(res['message'] ??
+                                  'Failed to submit review'),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: selectedStatus == 'approved'
+                    ? AppColors.success
+                    : AppColors.error,
+                foregroundColor: AppColors.white,
+              ),
+              child: _reviewingId == id
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : Text("Submit"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.grey400)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.navy)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabDef {
+  final String label;
+  final String endpoint;
+  const _TabDef({required this.label, required this.endpoint});
 }

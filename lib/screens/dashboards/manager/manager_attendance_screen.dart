@@ -16,20 +16,85 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   List<Map<String, dynamic>> _logs = [];
   bool _isLoading = true;
 
-  String _selectedMonth = 'March';
-  String _selectedYear = '2026';
+  late String _selectedMonth;
+  late String _selectedYear;
   String _selectedStatus = 'All Status';
   DateTime? _selectedDate;
 
   @override
   void initState() {
     super.initState();
+    _selectedMonth = DateFormat('MMMM').format(DateTime.now());
+    _selectedYear = DateTime.now().year.toString();
     _fetchLogs();
+  }
+
+  List<Map<String, dynamic>> get _filteredLogs {
+    return _logs.where((log) {
+      try {
+        final dateRaw = log['date']?.toString() ?? '';
+        final date = DateTime.parse(dateRaw).toLocal();
+
+        // Date picker filter
+        if (_selectedDate != null) {
+          if (date.year != _selectedDate!.year ||
+              date.month != _selectedDate!.month ||
+              date.day != _selectedDate!.day) {
+            return false;
+          }
+        }
+
+        // Month filter
+        if (_selectedMonth != 'All' && _selectedMonth != 'All Status') {
+          final logMonth = DateFormat('MMMM').format(date);
+          if (logMonth != _selectedMonth) return false;
+        }
+
+        // Year filter
+        if (_selectedYear != 'All' && _selectedYear != 'All Status') {
+          if (date.year.toString() != _selectedYear) return false;
+        }
+
+        // Status filter
+        if (_selectedStatus != 'All Status') {
+          final status = (log['attendance_status']?.toString() ?? '').toLowerCase();
+          final isActive = log['clock_out'] == null;
+          final isLate = log['is_late'] == 1 || log['is_late'] == true;
+          String computedStatus = status;
+          if (computedStatus.isEmpty) {
+            if (isLate) { computedStatus = 'late'; }
+            else if (isActive) { computedStatus = 'working'; }
+            else { computedStatus = 'present'; }
+          }
+          final filterStatus = _selectedStatus.toLowerCase();
+          if (filterStatus == 'half day' && !computedStatus.contains('half')) { return false; }
+          else if (filterStatus != 'half day' && !computedStatus.contains(filterStatus)) { return false; }
+        }
+
+        return true;
+      } catch (_) {
+        return true;
+      }
+    }).toList();
   }
 
   Future<void> _fetchLogs() async {
     setState(() => _isLoading = true);
-    final res = await ApiService.getMyAttendance();
+    
+    int month = 1;
+    try {
+      final date = DateFormat('MMMM').parse(_selectedMonth);
+      month = date.month;
+    } catch (_) {
+      month = DateTime.now().month;
+    }
+    
+    int year = DateTime.now().year;
+    try {
+      year = int.parse(_selectedYear);
+    } catch (_) {}
+
+    final res = await ApiService.getMyAttendance(month: month, year: year);
     if (mounted) {
       if (res['error'] == false) {
         setState(() {
@@ -46,14 +111,10 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
   }
 
   final List<String> _months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  final List<String> _years = ['2025', '2026', '2027'];
+  final List<String> _years = ['2024', '2025', '2026', '2027'];
   final List<String> _statuses = [
     'All Status',
     'Present',
@@ -243,12 +304,18 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               _buildDropdown(
                 _selectedMonth,
                 _months,
-                (v) => setState(() => _selectedMonth = v!),
+                (v) {
+                  setState(() => _selectedMonth = v!);
+                  _fetchLogs();
+                },
               ),
               _buildDropdown(
                 _selectedYear,
                 _years,
-                (v) => setState(() => _selectedYear = v!),
+                (v) {
+                  setState(() => _selectedYear = v!);
+                  _fetchLogs();
+                },
               ),
               _buildDropdown(
                 _selectedStatus,
@@ -264,11 +331,12 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               OutlinedButton(
                 onPressed: () {
                   setState(() {
-                    _selectedMonth = 'March';
-                    _selectedYear = '2026';
+                    _selectedMonth = DateFormat('MMMM').format(DateTime.now());
+                    _selectedYear = DateTime.now().year.toString();
                     _selectedStatus = 'All Status';
                     _selectedDate = null;
                   });
+                  _fetchLogs();
                 },
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
@@ -280,7 +348,7 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               ),
               const SizedBox(width: 12),
               ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: () => _fetchLogs(),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.navy,
                   foregroundColor: AppColors.white,
@@ -380,7 +448,10 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       padding: EdgeInsets.all(40.0),
       child: CircularProgressIndicator(color: AppColors.navy),
     ));
-    if (_logs.isEmpty) return Center(child: Padding(
+
+    final filtered = _filteredLogs;
+
+    if (filtered.isEmpty) return Center(child: Padding(
       padding: const EdgeInsets.all(40.0),
       child: Text("No records found", style: GoogleFonts.inter(color: AppColors.grey400)),
     ));
@@ -388,9 +459,9 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: _logs.length,
+      itemCount: filtered.length,
       itemBuilder: (context, index) {
-        final log = _logs[index];
+        final log = filtered[index];
         return _buildLogCard(log);
       },
     );

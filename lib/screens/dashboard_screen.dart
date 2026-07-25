@@ -16,17 +16,15 @@ import 'dashboards/employee/company_holidays_screen.dart';
 import 'dashboards/employee/employee_dashboard.dart';
 import 'dashboards/employee/my_salary_screen.dart';
 import 'dashboards/admin/admin_dashboard.dart';
-import 'dashboards/admin/recruitment_screen.dart';
+import 'dashboards/admin/recruiting/recruiting_dashboard_screen.dart';
 import 'dashboards/admin/employee_leaves_screen.dart';
 import 'dashboards/admin/manager_leaves_screen.dart';
 import 'dashboards/admin/service_domains_screen.dart';
 import 'dashboards/admin/service_hosting_screen.dart';
-import 'dashboards/admin/client_profiles_screen.dart';
 import 'dashboards/admin/invoice_list_screen.dart';
 import 'dashboards/admin/create_invoice_screen.dart';
 import 'dashboards/admin/holiday_calendar_screen.dart';
-import 'dashboards/admin/settings_screen.dart';
-import 'dashboards/admin/whatsapp_settings_screen.dart';
+
 import 'dashboards/admin/team_attendance_screen.dart';
 import 'dashboards/admin/task_tracking_screen.dart';
 import 'dashboards/manager/manager_individual_dashboard.dart';
@@ -45,7 +43,8 @@ import 'dashboards/admin/managerprofile_screen.dart';
 import 'dashboards/admin/employeeprofile_screen.dart';
 import 'dashboards/admin/attendance_corrections_screen.dart';
 import 'dashboards/admin/all_daily_worksheets_screen.dart';
-import 'dashboards/admin/team_leader_approvals_screen.dart';
+import 'dashboards/admin/pending_approvals_screen.dart';
+import 'dashboards/admin/review_records_screen.dart';
 import 'dashboards/manager/manager_team_worksheets_screen.dart';
 import 'dashboards/manager/modules/business_leads_screen.dart';
 import 'dashboards/manager/modules/client_directory_screen.dart';
@@ -55,6 +54,9 @@ import 'dashboards/admin/payroll_management_screen.dart';
 import 'dashboards/admin/events_meetings_screen.dart';
 
 import 'dashboards/manager/manager_team_leaves_screen.dart';
+import 'dashboards/hr/team_pending_approvals_screen.dart';
+import 'dashboards/hr/team_reviewed_records_screen.dart';
+import 'dashboards/hr/all_review_records_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String userName;
@@ -71,16 +73,37 @@ class DashboardScreen extends StatefulWidget {
   });
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
+class DashboardScreenState extends State<DashboardScreen>
     with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedDashboardIndex = 0;
+  final List<int> _navigationHistory = [0];
   late List<Map<String, dynamic>> _dashboards;
   late AnimationController _pulseController;
   Timer? _ticker;
+
+  bool handlePop() {
+    if (_navigationHistory.length > 1) {
+      setState(() {
+        _navigationHistory.removeLast();
+        _selectedDashboardIndex = _navigationHistory.last;
+      });
+      return true; // Handled
+    }
+    return false; // Not handled
+  }
+
+  void _setDashboardIndex(int index) {
+    if (_selectedDashboardIndex != index) {
+      setState(() {
+        _navigationHistory.add(index);
+        _selectedDashboardIndex = index;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -105,7 +128,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   void _initDashboards() {
     final String role = widget.userRole.toLowerCase();
 
-    if (role == 'manager') {
+    if (role == 'manager' || role == 'hr') {
       _dashboards = [
         {'name': 'My Dashboard', 'icon': Icons.dashboard_rounded},
         {'name': 'Calendar', 'icon': Icons.calendar_today_rounded},
@@ -125,11 +148,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           'isSub': true,
         },
         {
-          'name': 'Daily Work Log',
-          'icon': Icons.description_rounded,
-          'isSub': true,
-        },
-        {
           'name': 'Tasks Management',
           'icon': Icons.assignment_rounded,
           'isSub': true,
@@ -141,6 +159,31 @@ class _DashboardScreenState extends State<DashboardScreen>
         },
         {'name': 'My Salary', 'icon': Icons.payments_rounded, 'isSub': true},
         {
+          'name': 'Daily Worksheets',
+          'icon': Icons.description_rounded,
+          'isHeader': true,
+        },
+        {
+          'name': 'Daily Work Log',
+          'icon': Icons.edit_note_rounded,
+          'isSub': true,
+        },
+        {
+          'name': 'Team Pending Approvals',
+          'icon': Icons.pending_actions_rounded,
+          'isSub': true,
+        },
+        {
+          'name': 'Team Reviewed Records',
+          'icon': Icons.history_rounded,
+          'isSub': true,
+        },
+        {
+          'name': 'All Review Records',
+          'icon': Icons.rate_review_rounded,
+          'isSub': true,
+        },
+        {
           'name': 'Team Management',
           'icon': Icons.groups_rounded,
           'isHeader': true,
@@ -148,11 +191,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         {
           'name': 'Team Attendance',
           'icon': Icons.person_pin_circle_rounded,
-          'isSub': true,
-        },
-        {
-          'name': 'Team Worksheets',
-          'icon': Icons.description_outlined,
           'isSub': true,
         },
         {
@@ -210,6 +248,26 @@ class _DashboardScreenState extends State<DashboardScreen>
           'isSub': true,
         },
         {
+          'name': 'Events & Meetings',
+          'icon': Icons.event_available_rounded,
+          'isSub': true,
+        },
+        {
+          'name': 'Task Management',
+          'icon': Icons.checklist_rounded,
+          'isSub': true,
+        },
+        {
+          'name': 'Payroll Management',
+          'icon': Icons.payments_rounded,
+          'isSub': true,
+        },
+        {
+          'name': 'Attendance',
+          'icon': Icons.access_time_rounded,
+          'isHeader': true,
+        },
+        {
           'name': 'Team Attendance',
           'icon': Icons.person_pin_circle_rounded,
           'isSub': true,
@@ -220,28 +278,23 @@ class _DashboardScreenState extends State<DashboardScreen>
           'isSub': true,
         },
         {
-          'name': 'All Daily Worksheets',
+          'name': 'Worksheets',
           'icon': Icons.description_outlined,
+          'isHeader': true,
+        },
+        {
+          'name': 'TL Worksheets',
+          'icon': Icons.manage_accounts_rounded,
           'isSub': true,
         },
         {
-          'name': 'Team Approvals',
-          'icon': Icons.rule_folder_rounded,
+          'name': 'Employee Records',
+          'icon': Icons.people_alt_rounded,
           'isSub': true,
         },
         {
-          'name': 'Payroll Management',
-          'icon': Icons.payments_rounded,
-          'isSub': true,
-        },
-        {
-          'name': 'Events & Meetings',
-          'icon': Icons.event_available_rounded,
-          'isSub': true,
-        },
-        {
-          'name': 'Task Management',
-          'icon': Icons.checklist_rounded,
+          'name': 'Rejected Records',
+          'icon': Icons.cancel_schedule_send_rounded,
           'isSub': true,
         },
         {'name': 'Recruitment', 'icon': Icons.person_search_rounded},
@@ -256,7 +309,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           'isSub': true,
         },
         {'name': 'Service Hosting', 'icon': Icons.dns_rounded, 'isSub': true},
-        {'name': 'Client Profiles', 'icon': Icons.account_box_rounded},
         {
           'name': 'Financials',
           'icon': Icons.receipt_long_rounded,
@@ -269,8 +321,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           'isSub': true,
         },
         {'name': 'Holiday Calendar', 'icon': Icons.beach_access_rounded},
-        {'name': 'System Settings', 'icon': Icons.settings_suggest_rounded},
-        {'name': 'WhatsApp Settings', 'icon': Icons.message_rounded},
       ];
     } else {
       // Default: Employee
@@ -370,7 +420,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ),
                         ),
                         onTap: () {
-                          setState(() => _selectedDashboardIndex = currentIdx);
+                          _setDashboardIndex(currentIdx);
                           Navigator.pop(context);
                         },
                       ),
@@ -430,7 +480,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                   ),
                   onTap: () {
-                    setState(() => _selectedDashboardIndex = idx);
+                    _setDashboardIndex(idx);
                     Navigator.pop(context);
                   },
                 );
@@ -555,12 +605,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     final String role = widget.userRole.toLowerCase();
 
     // Role-based main view
-    if (role == 'manager') {
+    if (role == 'manager' || role == 'hr') {
       return ManagerIndividualDashboard(userName: widget.userName);
     } else if (role == 'admin') {
       return AdminDashboard(
         onNavigate: (idx) {
-          if (mounted) setState(() => _selectedDashboardIndex = idx);
+          if (mounted) _setDashboardIndex(idx);
         },
       );
     } else {
@@ -604,11 +654,14 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       case 'Apply for Leave':
         final String lowerRole = role.toLowerCase();
-        final bool isMgmt = lowerRole.contains('manager') ||
+        final bool isMgmt =
+            lowerRole.contains('manager') ||
             lowerRole.contains('leader') ||
             lowerRole.contains('hr') ||
             lowerRole.contains('admin');
-        return isMgmt ? const ManagerLeaveRequestScreen() : const ApplyLeaveScreen();
+        return isMgmt
+            ? const ManagerLeaveRequestScreen()
+            : const ApplyLeaveScreen();
 
       case 'My Salary':
         return role == 'manager'
@@ -627,13 +680,19 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       case 'Team Worksheets':
         return const ManagerTeamWorksheetsScreen();
+      case 'Team Pending Approvals':
+        return const TeamPendingApprovalsScreen();
+      case 'Team Reviewed Records':
+        return const TeamReviewedRecordsScreen();
+      case 'All Review Records':
+        return const AllReviewRecordsScreen();
       case 'Employee Approvals':
-        return role == 'manager'
+        return role == 'manager' || role == 'hr'
             ? const ManagerTeamLeavesScreen()
             : const EmployeeLeavesScreen(); // Default
 
       case 'Recruitment':
-        return const RecruitmentScreen();
+        return const RecruitingDashboardScreen();
 
       case 'Employee Leaves':
       case 'Staff Leave Data':
@@ -648,9 +707,6 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       case 'Service Hosting':
         return const ServiceHostingScreen();
-
-      case 'Client Profiles':
-        return const ClientProfilesScreen();
 
       case 'Invoice List':
         return const InvoiceListScreen();
@@ -677,24 +733,23 @@ class _DashboardScreenState extends State<DashboardScreen>
       case 'Holiday Calendar':
         return const HolidayCalendarScreen();
 
-      case 'System Settings':
-      case 'Settings':
-        return const SettingsScreen();
-
-      case 'WhatsApp Settings':
-        return const WhatsappSettingsScreen();
-
       case 'Team Attendance':
-        return role == 'manager'
+        return role == 'manager' || role == 'hr'
             ? const TeamAttendanceViewScreen()
             : const TeamAttendanceScreen();
 
       case 'Attendance Corrections':
         return const AttendanceCorrectionsScreen();
       case 'All Daily Worksheets':
+      case 'TL Worksheets':
         return const AllDailyWorksheetsScreen();
-      case 'Team Approvals':
-        return const TeamLeaderApprovalsScreen();
+      case 'Pending Approvals':
+      case 'Employee Records':
+        return const PendingApprovalsScreen();
+      case 'Review Records':
+      case 'Rejected Records':
+        return const ReviewRecordsScreen();
+
       case 'Payroll Management':
         return const PayrollManagementScreen();
       case 'Events & Meetings':

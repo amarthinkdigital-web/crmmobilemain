@@ -210,6 +210,15 @@ class _TaskTrackingScreenState extends State<TaskTrackingScreen> {
     }).toList();
   }
 
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return 'N/A';
+    try {
+      return DateFormat('dd MMM yyyy').format(DateTime.parse(dateStr).toLocal());
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   String _capitalize(String s) {
     if (s.isEmpty) return s;
     // Handle snake_case and multiple words
@@ -748,7 +757,7 @@ class _TaskTrackingScreenState extends State<TaskTrackingScreen> {
         ),
         DataCell(
           Text(
-            task['dueDate'],
+            _formatDate(task['dueDate']),
             style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600),
           ),
         ),
@@ -835,7 +844,7 @@ class _TaskTrackingScreenState extends State<TaskTrackingScreen> {
               _detailRow("Assignee", task['receiver']),
               _detailRow("Priority", task['priority']),
               _detailRow("Status", task['status']),
-              _detailRow("Due Date", task['dueDate']),
+              _detailRow("Due Date", _formatDate(task['dueDate'])),
               _detailRow("Time Spent", task['timeSpent']),
             ],
           ),
@@ -909,7 +918,7 @@ class _TaskActionDialogState extends State<_TaskActionDialog> {
     _fetchEmployees();
     if (widget.editTask != null) {
       try {
-        _dueDate = DateTime.parse(widget.editTask!['due_date']);
+        _dueDate = DateTime.parse(widget.editTask!['due_date']).toLocal();
       } catch (e) {
         _dueDate = DateTime.now();
       }

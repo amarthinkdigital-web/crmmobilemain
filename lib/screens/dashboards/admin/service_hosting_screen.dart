@@ -713,18 +713,23 @@ class _ServiceHostingScreenState extends State<ServiceHostingScreen> {
       companyName = client['company_name'];
     }
 
-    final body = {
+    final Map<String, dynamic> body = {
       "project_id": selectedProjectId,
       "client_id": selectedClientId,
       "company_name": companyName ?? "N/A",
       "domain_name": domainController.text,
       "hosting_service": serviceController.text,
-      "purchase_date": purchaseDateController.text,
-      "expiry_date": expiryDateController.text,
-      "payment_amount": double.tryParse(amountController.text) ?? 0.0,
+      "payment_amount": amountController.text.isNotEmpty ? amountController.text : "0",
       "payment_mode": selectedPaymentMode,
       "status": selectedStatus,
     };
+
+    if (purchaseDateController.text.isNotEmpty) {
+      body["purchase_date"] = purchaseDateController.text;
+    }
+    if (expiryDateController.text.isNotEmpty) {
+      body["expiry_date"] = expiryDateController.text;
+    }
 
     setState(() => _isLoading = true);
 
