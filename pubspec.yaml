@@ -1,12 +1,12 @@
 name: crm_thinkdigital
 description: "ThinkDigital CRM - Time Tracker"
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.11.0
 
-dependencies:
+dependencies: 
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8

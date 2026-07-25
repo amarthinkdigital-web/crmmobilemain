@@ -14,9 +14,10 @@ class TeamAttendanceViewScreen extends StatefulWidget {
 class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
   // Filters & State for Attendance Logs
   String selectedEmployee = "All Employees";
-  String? selectedEmployeeId;
+  String selectedEmployeeId = "all";
   String selectedStatus = "All Status";
   String selectedMonth = DateFormat('MMMM').format(DateTime.now());
+  String selectedYear = DateTime.now().year.toString();
   DateTime? selectedDate;
   final searchController = TextEditingController();
 
@@ -30,9 +31,13 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
   ];
+  final List<String> years = List.generate(
+    10, (i) => (DateTime.now().year - 5 + i).toString(),
+  );
 
   List<Map<String, dynamic>> attendanceData = [];
   bool isLoading = true;
+  String _errorMessage = '';
 
   // Summary Stats
   int _totalEmpCount = 0;
@@ -106,10 +111,9 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
     } else {
       final monthIndex = months.indexOf(selectedMonth) + 1;
       if (monthIndex > 0) {
-        final now = DateTime.now();
-        final year = now.year;
+        final year = int.tryParse(selectedYear) ?? DateTime.now().year;
         final start = DateTime(year, monthIndex, 1);
-        final end = DateTime(year, monthIndex + 1, 0).subtract(const Duration(seconds: 1)); // End of month
+        final end = DateTime(year, monthIndex + 1, 0);
         startStr = DateFormat('yyyy-MM-dd').format(start);
         endStr = DateFormat('yyyy-MM-dd').format(end);
       }
@@ -149,12 +153,16 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
             _presentCount++; userStatsMap[userId]!['present']++;
             if (isLate) { _lateCount++; userStatsMap[userId]!['late']++; }
             if (status.contains('half')) { _halfDayCount++; userStatsMap[userId]!['half']++; }
+          } else if (status.contains('half')) {
+            _halfDayCount++; userStatsMap[userId]!['half']++;
           } else if (status.contains('absent')) {
             _absentCount++; userStatsMap[userId]!['absent']++;
           } else if (status.contains('leave') || status.contains('official_leave')) {
             _leaveCount++; userStatsMap[userId]!['leave']++;
           } else if (status.contains('off') || status.contains('holiday') || status.contains('weekly_off')) {
             _offCount++; userStatsMap[userId]!['off']++;
+          } else if (status.isEmpty) {
+            _absentCount++; userStatsMap[userId]!['absent']++;
           }
           
           if (otHours > 0) { _otCount++; userStatsMap[userId]!['ot'] += otHours; }
@@ -168,6 +176,7 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
         }
 
         setState(() {
+          _errorMessage = '';
           attendanceData = List<Map<String, dynamic>>.from(dataList);
 
           // Enrich each data item with its user's summary stats for the current view
@@ -193,11 +202,15 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
         setState(() {
           attendanceData = [];
           isLoading = false;
+          _errorMessage = res['message'] ?? 'Failed to load attendance';
         });
       }
     } catch (e) {
       debugPrint("Error fetching attendance: $e");
-      setState(() => isLoading = false);
+      setState(() {
+        isLoading = false;
+        _errorMessage = 'Network error: $e';
+      });
     }
   }
 
@@ -229,12 +242,11 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
       bool matchSearch = nameStr.toLowerCase().contains(search);
 
       // Match by ID if selected
-      bool matchEmp = selectedEmployeeId == null ||
-          selectedEmployeeId == "all" ||
+      bool matchEmp = selectedEmployeeId == "all" ||
           d['user_id']?.toString() == selectedEmployeeId;
 
       String statusStr =
-          d['attendance_status']?.toString() ?? d['status']?.toString() ?? 'Present';
+          d['attendance_status']?.toString() ?? d['status']?.toString() ?? '';
       bool matchStatus = selectedStatus == "All Status" ||
           statusStr.toLowerCase().contains(selectedStatus.toLowerCase());
 
@@ -289,6 +301,20 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
             const SizedBox(height: 24),
             _buildFilterSection(),
             const SizedBox(height: 24),
+            if (_errorMessage.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _errorMessage,
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ),
             isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : filteredAttendance.isEmpty
@@ -444,17 +470,17 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildDropdown(
+                   _buildDropdown(
                       null,
-                      selectedEmployeeId ?? "all",
+                      selectedEmployeeId,
                       employees
                           .map((e) => DropdownMenuItem<String>(
                               value: e['id'], child: Text(e['name']!)))
                           .toList(), (v) {
                     setState(() {
-                      selectedEmployeeId = v;
+                      selectedEmployeeId = v ?? "all";
                       selectedEmployee = employees
-                          .firstWhere((e) => e['id'] == v)['name']!;
+                          .firstWhere((e) => e['id'] == selectedEmployeeId)['name']!;
                     });
                   }),
                   const SizedBox(width: 8),
@@ -476,19 +502,30 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
                           .map((m) => DropdownMenuItem<String>(
                               value: m, child: Text(m)))
                           .toList(),
-                      (v) => setState(() => selectedMonth = v!)),
-                  const SizedBox(width: 12),
-                  ElevatedButton(onPressed: _fetchAttendance, style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: AppColors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text("Search")),
+                       (v) => setState(() => selectedMonth = v!)),
+                   const SizedBox(width: 8),
+                   _buildDropdown(
+                       null,
+                       selectedYear,
+                       years
+                           .map((y) => DropdownMenuItem<String>(
+                               value: y, child: Text(y)))
+                           .toList(),
+                       (v) => setState(() => selectedYear = v!)),
+                   const SizedBox(width: 12),
+                   ElevatedButton(onPressed: _fetchAttendance, style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, foregroundColor: AppColors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text("Search")),
                   const SizedBox(width: 8),
                   OutlinedButton(
                       onPressed: () {
                         setState(() {
+                          _errorMessage = '';
                           selectedDate = null;
                           selectedEmployee = "All Employees";
                           selectedEmployeeId = "all";
                           selectedStatus = "All Status";
                           selectedMonth =
-                              DateFormat('MMMM').format(DateTime.now());
+                               DateFormat('MMMM').format(DateTime.now());
+                          selectedYear = DateTime.now().year.toString();
                           searchController.clear();
                         });
                         _fetchAttendance();
@@ -554,7 +591,7 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
     final String lastName = userMap['last_name']?.toString() ?? data['last_name']?.toString() ?? '';
     final String nameStr = firstName.isNotEmpty ? '$firstName $lastName'.trim() : (userMap['name']?.toString() ?? data['name']?.toString() ?? 'Unknown');
 
-    final statusStr = data['attendance_status']?.toString() ?? data['status']?.toString() ?? 'Present';
+    final statusStr = data['attendance_status']?.toString() ?? data['status']?.toString() ?? '';
     final statusColor = _getStatusColor(statusStr);
     final stats = (data['stats'] is Map) ? data['stats'] : {};
     

@@ -33,13 +33,32 @@ class _ManagerCorrectionsScreenState extends State<ManagerCorrectionsScreen> wit
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     final myRes = await ApiService.getMyCorrections();
-    final teamRes = await ApiService.getAdminCorrections(status: 'pending'); // Use same admin endpoint as doc says HR/Admin can access this
+    // Fetch all statuses so manager sees full team history
+    final results = await Future.wait([
+      ApiService.getAdminCorrections(status: 'pending'),
+      ApiService.getAdminCorrections(status: 'approved'),
+      ApiService.getAdminCorrections(status: 'rejected'),
+    ]);
 
     if (mounted) {
+      final combined = <dynamic>[];
+      for (final res in results) {
+        if (res['error'] == false && res['data'] is List) {
+          combined.addAll(res['data']);
+        }
+      }
+      // Sort: pending first, approved, rejected
+      combined.sort((a, b) {
+        const order = {'pending': 0, 'approved': 1, 'rejected': 2};
+        final aO = order[a['status']?.toString() ?? 'pending'] ?? 99;
+        final bO = order[b['status']?.toString() ?? 'pending'] ?? 99;
+        return aO.compareTo(bO);
+      });
+
       setState(() {
         _isLoading = false;
         if (myRes['error'] == false) _myRequests = myRes['data'] ?? [];
-        if (teamRes['error'] == false) _teamRequests = teamRes['data'] ?? [];
+        _teamRequests = combined;
       });
     }
   }
@@ -157,7 +176,7 @@ class _ManagerCorrectionsScreenState extends State<ManagerCorrectionsScreen> wit
             DataCell(Text(req['clock_in'] ?? "-")),
             DataCell(Text(req['clock_out'] ?? "-")),
             DataCell(Text(status.toUpperCase(), style: TextStyle(color: status == 'approved' ? AppColors.success : (status == 'rejected' ? AppColors.error : AppColors.warning), fontWeight: FontWeight.bold))),
-            DataCell(Text(req['created_at'] != null ? DateFormat('MMM dd').format(DateTime.tryParse(req['created_at']) ?? DateTime.now()) : "N/A")),
+            DataCell(Text(req['created_at'] != null ? DateFormat('MMM dd').format((DateTime.tryParse(req['created_at']) ?? DateTime.now()).toLocal()) : "N/A")),
           ]);
         }).toList(),
       ),
@@ -165,34 +184,143 @@ class _ManagerCorrectionsScreenState extends State<ManagerCorrectionsScreen> wit
   }
 
   Widget _buildTeamApprovalsTab() {
-    if (_teamRequests.isEmpty) return const Center(child: Text("No pending requests from team"));
+    if (_teamRequests.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.assignment_turned_in_rounded, size: 64, color: AppColors.grey200),
+            const SizedBox(height: 16),
+            Text('No team correction requests', style: TextStyle(color: AppColors.grey400)),
+          ],
+        ),
+      );
+    }
     return ListView.builder(
       padding: const EdgeInsets.all(20),
       itemCount: _teamRequests.length,
       itemBuilder: (context, index) {
         final req = _teamRequests[index];
+        final user = req['user'] ?? {};
+        final fname = user['first_name']?.toString() ?? '';
+        final lname = user['last_name']?.toString() ?? '';
+        final name = fname.isNotEmpty
+            ? '$fname $lname'.trim()
+            : (user['name']?.toString() ??
+               req['employee_name']?.toString() ??
+               req['user_name']?.toString() ??
+               'Employee #${req['id']}');
+
+        final status = (req['status'] ?? 'pending').toString().toLowerCase();
+        Color statusColor = AppColors.warning;
+        if (status == 'approved') statusColor = AppColors.success;
+        if (status == 'rejected') statusColor = AppColors.error;
+
         return Card(
-           margin: const EdgeInsets.only(bottom: 12),
-           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-           child: ListTile(
-             leading: const CircleAvatar(backgroundColor: AppColors.gold, child: Icon(Icons.person, color: Colors.white)),
-             title: Text("Request #${req['id']}"),
-             subtitle: Text("Date: ${req['date']} | In: ${req['clock_in']}"),
-             trailing: TextButton(onPressed: () => _updateTeamStatus(req['id'], 'approved'), child: const Text("APPROVE", style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold))),
-           ),
+          margin: const EdgeInsets.only(bottom: 12),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: AppColors.grey100),
+          ),
+          child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: CircleAvatar(
+              backgroundColor: AppColors.gold.withValues(alpha: 0.1),
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : 'E',
+                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.gold),
+              ),
+            ),
+            title: Text(name, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.navy)),
+            subtitle: Text(
+              'Date: ${req['date'] ?? '-'} · In: ${req['clock_in'] ?? '-'} · Out: ${req['clock_out'] ?? '-'}',
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey400),
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.w800, fontSize: 10)),
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    if (req['reason'] != null)
+                      Text('Reason: ${req['reason']}',
+                        style: GoogleFonts.inter(fontSize: 13, color: AppColors.navy)),
+                    if (req['admin_remark'] != null && req['admin_remark'] != '-') ...[
+                      const SizedBox(height: 8),
+                      Text('Admin Remark: ${req['admin_remark']}',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600, fontStyle: FontStyle.italic)),
+                    ],
+                    if (status == 'pending') ...[
+                      const SizedBox(height: 16),
+                      Row(children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _updateTeamStatus(req['id'], 'rejected'),
+                            style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: const BorderSide(color: AppColors.error), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                            child: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => _updateTeamStatus(req['id'], 'approved'),
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                            child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
   Future<void> _updateTeamStatus(int id, String status) async {
+    final remarkController = TextEditingController();
+    final remark = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${status == 'approved' ? 'Approve' : 'Reject'} Request',
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: remarkController,
+          decoration: const InputDecoration(hintText: 'Enter remark (optional)...'),
+          maxLines: 2,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, remarkController.text),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (remark == null) return;
     setState(() => _isLoading = true);
-    final res = await ApiService.updateCorrectionStatus(id, status, "Approved by Manager");
+    final res = await ApiService.updateCorrectionStatus(id, status, remark);
     if (res['error'] == false) {
-      _showToast(res['message'] ?? "Approved team request!");
+      _showToast(res['message'] ?? 'Request $status successfully!');
       _fetchData();
     } else {
-      _showToast(res['message'] ?? "Action failed", isError: true);
+      _showToast(res['message'] ?? 'Action failed', isError: true);
       setState(() => _isLoading = false);
     }
   }

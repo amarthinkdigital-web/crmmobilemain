@@ -127,10 +127,10 @@ class _ManagerPageState extends State<ManagerPage> {
           selectedDepartment == "All Departments" ||
           deptName == selectedDepartment;
 
-      String statusStr = m['status']?.toString() ?? 'Active';
+      String statusStr = m['employee_status']?.toString() ?? m['status']?.toString() ?? 'Active';
       bool matchStatus =
           selectedStatus == "All" ||
-          statusStr.toLowerCase() == selectedStatus.toLowerCase();
+          statusStr.toLowerCase().contains(selectedStatus.toLowerCase().replaceAll(' ', ''));
 
       String stateStr = m['state']?.toString() ?? 'N/A';
       bool matchState =
@@ -582,7 +582,7 @@ class _ManagerPageState extends State<ManagerPage> {
         manager['phone_number']?.toString() ??
         'N/A';
     final String stateStr = manager['state']?.toString() ?? 'N/A';
-    final String statusStr = manager['status']?.toString() ?? 'Active';
+    final String statusStr = manager['employee_status']?.toString() ?? manager['status']?.toString() ?? 'Active';
 
     final statusColor = _getStatusColor(statusStr);
 
@@ -702,26 +702,110 @@ class _ManagerPageState extends State<ManagerPage> {
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // Status Dropdown Button
+                _buildStatusDropdown(manager),
                 _buildActionButton(
                   Icons.visibility_outlined,
                   "View",
                   () => _showManagerDetails(manager),
                 ),
-                const SizedBox(width: 10),
-                // _buildActionButton(Icons.edit_outlined, "Edit", () {}),
-                // const SizedBox(width: 10),
-                // _buildActionButton(
-                //   Icons.delete_outline_rounded,
-                //   "Delete",
-                //   () {},
-                //   color: AppColors.error,
-                // ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  static const List<String> _statusOptions = [
+    'Active',
+    'Terminate',
+    'Resigned',
+    'On Hold',
+  ];
+
+  Future<void> _updateManagerStatus(
+    Map<String, dynamic> manager,
+    String newStatus,
+  ) async {
+    final id = manager['id'];
+    if (id == null) return;
+
+    final res = await ApiService.updateManagerProfileStatus(
+      int.parse(id.toString()),
+      newStatus,
+    );
+
+    if (!mounted) return;
+
+    if (res['error'] == false) {
+      // Optimistically update local state
+      setState(() {
+        final idx = managers.indexOf(manager);
+        if (idx != -1) {
+          managers[idx]['status'] = newStatus;
+          managers[idx]['employee_status'] = newStatus;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Status updated to $newStatus'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Failed to update status'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Widget _buildStatusDropdown(Map<String, dynamic> manager) {
+    final currentStatus = manager['employee_status']?.toString() ?? manager['status']?.toString() ?? 'Active';
+    final statusColor = _getStatusColor(currentStatus);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _statusOptions.contains(currentStatus) ? currentStatus : _statusOptions[0],
+          isDense: true,
+          icon: Icon(Icons.arrow_drop_down_rounded, color: statusColor, size: 18),
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: statusColor,
+          ),
+          items: _statusOptions.map((s) {
+            final c = _getStatusColor(s);
+            return DropdownMenuItem<String>(
+              value: s,
+              child: Text(
+                s,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: c,
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (newStatus) {
+            if (newStatus != null && newStatus != currentStatus) {
+              _updateManagerStatus(manager, newStatus);
+            }
+          },
+        ),
       ),
     );
   }
@@ -746,7 +830,7 @@ class _ManagerPageState extends State<ManagerPage> {
       deptName = manager['dept'].toString();
     }
 
-    final String statusStr = manager['status']?.toString() ?? 'Active';
+    final String statusStr = manager['employee_status']?.toString() ?? manager['status']?.toString() ?? 'Active';
 
     showDialog(
       context: context,
@@ -1035,16 +1119,12 @@ class _ManagerPageState extends State<ManagerPage> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Active':
-        return AppColors.success;
-      case 'On Hold':
-        return AppColors.warning;
-      case 'Terminate':
-      case 'Resigned':
-        return AppColors.error;
-      default:
-        return AppColors.grey600;
+    final s = status.toLowerCase();
+    if (s.contains('active')) return AppColors.success;
+    if (s.contains('hold')) return AppColors.warning;
+    if (s.contains('terminate') || s.contains('resigned')) {
+      return AppColors.error;
     }
+    return AppColors.grey600;
   }
 }

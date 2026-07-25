@@ -329,27 +329,34 @@ class _ServiceDomainsScreenState extends State<ServiceDomainsScreen> {
   }
 
   Future<void> _handleSave(int? id) async {
-    final body = {
+    String? companyName;
+    if (selectedClientId != null) {
+      final client = _clients.firstWhere(
+        (c) => c['id'] == selectedClientId,
+        orElse: () => {},
+      );
+      companyName = client['company_name'];
+    }
+
+    final Map<String, dynamic> body = {
       "project_id": selectedProjectId,
       "client_id": selectedClientId,
-      "company_name": _clients.firstWhere(
-        (c) => c['id'] == selectedClientId,
-        orElse: () => {
-          'company_name': companyController.text.isNotEmpty
-              ? companyController.text
-              : 'N/A',
-        },
-      )['company_name'],
+      "company_name": companyName ?? (companyController.text.isNotEmpty ? companyController.text : "N/A"),
       "domain_name": domainController.text,
-      "purchase_date": purchaseDateController.text,
-      "expiry_date": dateController.text,
-      "plan_years": int.tryParse(planYearsController.text) ?? 1,
+      "plan_years": planYearsController.text.isNotEmpty ? planYearsController.text : "1",
       "domain_provider": providerController.text,
       "domain_username": usernameController.text,
       "domain_password": passwordController.text,
       "status": selectedStatus,
-      "renew_charges": double.tryParse(renewChargesController.text) ?? 0.0,
+      "renew_charges": renewChargesController.text.isNotEmpty ? renewChargesController.text : "0",
     };
+
+    if (purchaseDateController.text.isNotEmpty) {
+      body["purchase_date"] = purchaseDateController.text;
+    }
+    if (dateController.text.isNotEmpty) {
+      body["expiry_date"] = dateController.text;
+    }
 
     setState(() => _isLoading = true);
 

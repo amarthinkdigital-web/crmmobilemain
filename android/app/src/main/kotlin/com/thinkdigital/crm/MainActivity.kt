@@ -1,4 +1,4 @@
-package com.example.crm_thinkdigital
+package com.thinkdigital.crm
 
 import io.flutter.embedding.android.FlutterActivity
 

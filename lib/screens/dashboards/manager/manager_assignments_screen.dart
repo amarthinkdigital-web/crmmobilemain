@@ -224,6 +224,15 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
     }).toList();
   }
 
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return 'N/A';
+    try {
+      return DateFormat('dd MMM yyyy').format(DateTime.parse(dateStr).toLocal());
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   String _capitalize(String s) {
     if (s.isEmpty) return s;
     String formatted = s.replaceAll('_', ' ');
@@ -770,7 +779,7 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
                         ),
                       ),
                     ),
-                    DataCell(Text(task['due'])),
+                    DataCell(Text(_formatDate(task['due']))),
                     DataCell(Text(task['spent'])),
                     DataCell(
                       Row(
@@ -832,7 +841,7 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
             _detailText("Receiver", task['receiver']),
             _detailText("Priority", task['priority']),
             _detailText("Status", task['status']),
-            _detailText("Due Date", task['due']),
+            _detailText("Due Date", _formatDate(task['due'])),
             _detailText(
               "Description",
               task['raw']['description'] ?? 'No description',
@@ -931,6 +940,11 @@ class _TaskActionDialogState extends State<_TaskActionDialog> {
       text: widget.editTask?['description'] ?? "",
     );
     _priority = (widget.editTask?['priority'] ?? 'medium').toLowerCase();
+    if (widget.editTask?['due_date'] != null) {
+      try {
+        _dueDate = DateTime.parse(widget.editTask!['due_date']).toLocal();
+      } catch (_) {}
+    }
     _fetchEmployees();
   }
 

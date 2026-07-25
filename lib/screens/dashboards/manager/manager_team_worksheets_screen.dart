@@ -122,9 +122,18 @@ class _ManagerTeamWorksheetsScreenState extends State<ManagerTeamWorksheetsScree
             rows: _worksheets.map((log) {
               final String name = log['user']?['name'] ?? log['employee_name'] ?? 'N/A';
               final String date = log['work_date'] ?? 'N/A';
-              final String project = log['project']?['name'] ?? log['project_name'] ?? 'N/A';
-              final String work = log['todays_work'] ?? 'N/A';
-              final String status = log['status'] ?? 'N/A';
+              // Backend uses 'items' for multi-project worksheets
+              final items = log['items'] as List? ?? log['projects'] as List? ?? [];
+              String project;
+              String work;
+              if (items.isNotEmpty) {
+                project = items.map((p) => p['project_name'] ?? p['project']?['name'] ?? '').where((n) => n.toString().isNotEmpty).join(', ');
+                work = items.map((p) => p['todays_work']?.toString() ?? '').where((n) => n.isNotEmpty).join('; ');
+              } else {
+                project = log['project']?['name'] ?? log['project_name'] ?? 'N/A';
+                work = log['todays_work'] ?? 'N/A';
+              }
+              final String status = log['approval_status']?.toString() ?? log['status'] ?? 'N/A';
 
               return DataRow(cells: [
                 DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.w600))),
@@ -163,8 +172,9 @@ class _ManagerTeamWorksheetsScreenState extends State<ManagerTeamWorksheetsScree
   }
 
   void _showReviewDialog(dynamic log) {
+    String selectedStatus = 'approved';
     final pointsController = TextEditingController();
-    final remarkController = TextEditingController();
+    final commentController = TextEditingController();
     bool isSubmitting = false;
 
     showDialog(
@@ -175,15 +185,59 @@ class _ManagerTeamWorksheetsScreenState extends State<ManagerTeamWorksheetsScree
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Employee info
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.infoBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: AppColors.info, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Reviewing: ${log['user']?['name'] ?? log['employee_name'] ?? 'Employee'}",
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.info),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Approve/Reject chips
+              Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Text("Approve"),
+                      selected: selectedStatus == 'approved',
+                      selectedColor: AppColors.success.withValues(alpha: 0.2),
+                      onSelected: (_) => setModalState(() => selectedStatus = 'approved'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Text("Reject"),
+                      selected: selectedStatus == 'rejected',
+                      selectedColor: AppColors.error.withValues(alpha: 0.2),
+                      onSelected: (_) => setModalState(() => selectedStatus = 'rejected'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: pointsController,
-                decoration: const InputDecoration(labelText: "Points (0-10)"),
+                decoration: const InputDecoration(labelText: "Points (0-10)", hintText: "Enter points"),
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: remarkController,
-                decoration: const InputDecoration(labelText: "Remark"),
+                controller: commentController,
+                decoration: const InputDecoration(labelText: "Review Comment", hintText: "Add your feedback"),
                 maxLines: 3,
               ),
             ],
@@ -195,8 +249,9 @@ class _ManagerTeamWorksheetsScreenState extends State<ManagerTeamWorksheetsScree
               onPressed: isSubmitting ? null : () async {
                 setModalState(() => isSubmitting = true);
                 final res = await ApiService.reviewTeamWorksheet(log['id'], {
-                  'points': pointsController.text,
-                  'remark': remarkController.text,
+                  'approval_status': selectedStatus,
+                  'points': int.tryParse(pointsController.text) ?? 0,
+                  'leader_comment': commentController.text,
                 });
                 if (mounted) {
                   Navigator.pop(context);
@@ -207,7 +262,7 @@ class _ManagerTeamWorksheetsScreenState extends State<ManagerTeamWorksheetsScree
                     );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(res['message']), backgroundColor: AppColors.error),
+                      SnackBar(content: Text(res['message'] ?? 'Failed to submit review'), backgroundColor: AppColors.error),
                     );
                   }
                 }

@@ -254,7 +254,7 @@ class _ClientDirectoryScreenState extends State<ClientDirectoryScreen> {
       centerTitle: false,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.navy, size: 20),
-        onPressed: () => Navigator.pop(context),
+        onPressed: () => Navigator.maybePop(context),
       ),
       title: Text("Client Directory", style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.navy)),
     );

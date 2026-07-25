@@ -43,10 +43,10 @@ class ClientDomain {
       domainName: json['domain_name']?.toString(),
       companyName: json['company_name']?.toString(),
       purchaseDate: json['purchase_date'] != null
-          ? DateTime.tryParse(json['purchase_date'].toString())
+          ? DateTime.tryParse(json['purchase_date'].toString())?.toLocal()
           : null,
       expiryDate: json['expiry_date'] != null
-          ? DateTime.tryParse(json['expiry_date'].toString())
+          ? DateTime.tryParse(json['expiry_date'].toString())?.toLocal()
           : null,
       planYears: json['plan_years'] is int
           ? json['plan_years']
@@ -126,10 +126,10 @@ class ClientHosting {
       companyName: json['company_name']?.toString(),
       hostingService: json['hosting_service']?.toString(),
       purchaseDate: json['purchase_date'] != null
-          ? DateTime.tryParse(json['purchase_date'].toString())
+          ? DateTime.tryParse(json['purchase_date'].toString())?.toLocal()
           : null,
       expiryDate: json['expiry_date'] != null
-          ? DateTime.tryParse(json['expiry_date'].toString())
+          ? DateTime.tryParse(json['expiry_date'].toString())?.toLocal()
           : null,
       paymentAmount: json['payment_amount']?.toString(),
       paymentMode: json['payment_mode']?.toString(),

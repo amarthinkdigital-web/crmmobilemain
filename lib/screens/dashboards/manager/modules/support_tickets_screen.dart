@@ -89,7 +89,7 @@ class _SupportTicketsScreenState extends State<SupportTicketsScreen> {
       centerTitle: false,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.navy, size: 20),
-        onPressed: () => Navigator.pop(context),
+        onPressed: () => Navigator.maybePop(context),
       ),
       title: Text(
         "Support Tickets",

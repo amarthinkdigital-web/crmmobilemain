@@ -49,9 +49,9 @@ class Salary {
           json['deduction_reason']?.toString() ??
           json['deduction_reasons']?.toString(),
       user: json['user'] != null ? User.fromJson(json['user']) : null,
-      paidAt: json['paid_at'] != null ? DateTime.parse(json['paid_at']) : null,
+      paidAt: json['paid_at'] != null ? DateTime.parse(json['paid_at']).toLocal() : null,
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
+          ? DateTime.parse(json['created_at']).toLocal()
           : null,
     );
   }

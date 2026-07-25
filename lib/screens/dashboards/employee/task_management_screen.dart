@@ -148,6 +148,15 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     }
   }
 
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return 'N/A';
+    try {
+      return DateFormat('dd MMM yyyy').format(DateTime.parse(dateStr).toLocal());
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   String _capitalize(String s) {
     if (s.isEmpty) return s;
     String formatted = s.replaceAll('_', ' ');
@@ -555,7 +564,7 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
         DataCell(_buildBadge(task['status'], _getStatusColor(task['status']))),
         DataCell(
           Text(
-            task['dueDate'],
+            _formatDate(task['dueDate']),
             style: GoogleFonts.inter(fontSize: 13, color: AppColors.grey600),
           ),
         ),
@@ -639,6 +648,15 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
   }
 
   void _viewTaskDetails(Map<String, dynamic> task) {
+    final raw = task['raw'];
+    final Map<String, dynamic> rawMap =
+        (raw is Map<String, dynamic>) ? raw : {};
+    final attachments = rawMap['attachments'];
+    final description = rawMap['description']?.toString() ??
+        rawMap['task_details']?.toString() ??
+        rawMap['task_name']?.toString() ??
+        'No description provided';
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -653,7 +671,7 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold),
               ),
             ),
-            _buildBadge(task['status'], _getStatusColor(task['status'])),
+            _buildBadge(task['status'] ?? 'N/A', _getStatusColor(task['status'] ?? 'Pending')),
           ],
         ),
         content: SingleChildScrollView(
@@ -661,24 +679,20 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _detailItem("Title", task['taskDetails']),
-              _detailItem(
-                "Description",
-                task['raw']['description'] ?? 'No description provided',
-              ),
+              _detailItem("Title", task['taskDetails']?.toString() ?? 'N/A'),
+              _detailItem("Description", description),
               _detailItem(
                 _isAssignedToMe ? "Assigned By" : "Assigned To",
-                _isAssignedToMe ? task['assignedBy'] : task['assignedTo'],
+                (_isAssignedToMe ? task['assignedBy'] : task['assignedTo'])?.toString() ?? 'N/A',
               ),
               Row(
                 children: [
-                  Expanded(child: _detailItem("Priority", task['priority'])),
-                  Expanded(child: _detailItem("Due Date", task['dueDate'])),
+                  Expanded(child: _detailItem("Priority", task['priority']?.toString() ?? 'N/A')),
+                  Expanded(child: _detailItem("Due Date", _formatDate(task['dueDate']))),
                 ],
               ),
-              _detailItem("Time Spent", task['timeTracking']),
-              if (task['raw']['attachments'] != null &&
-                  (task['raw']['attachments'] as List).isNotEmpty)
+              _detailItem("Time Spent", task['timeTracking']?.toString() ?? '00:00:00'),
+              if (attachments != null && attachments is List && attachments.isNotEmpty)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -691,11 +705,11 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    ...(task['raw']['attachments'] as List).map(
+                    ...attachments.map(
                       (a) => ListTile(
                         leading: const Icon(Icons.attach_file, size: 18),
                         title: Text(
-                          a['file_name'] ?? 'File',
+                          (a is Map ? a['file_name'] : null) ?? 'File',
                           style: const TextStyle(fontSize: 12),
                         ),
                         dense: true,
@@ -745,37 +759,141 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
   }
 
   void _showUpdateStatusDialog(Map<String, dynamic> task) {
+    final currentStatus = (task['status']?.toString() ?? 'pending').toLowerCase();
+    String selectedStatus = currentStatus == 'completed'
+        ? 'completed'
+        : currentStatus == 'in progress'
+            ? 'in_progress'
+            : 'pending';
+    double progress = 0;
+
+    // Try to parse current progress from raw data
+    try {
+      progress = double.parse(task['raw']?['progress_percentage']?.toString() ?? '0');
+    } catch (_) {}
+
+    if (selectedStatus == 'completed') progress = 100;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          "Update Status",
-          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text("In Progress"),
-              onTap: () => _updateStatus(task['id'], "in_progress"),
-            ),
-            ListTile(
-              title: const Text("Completed"),
-              onTap: () => _updateStatus(task['id'], "completed"),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(
-                Icons.play_arrow_rounded,
-                color: AppColors.success,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.update_rounded, color: AppColors.navy),
+              const SizedBox(width: 12),
+              Text(
+                "Update Status",
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
               ),
-              title: const Text("Start Timer"),
-              onTap: () => _handleTimer(task['id'], true),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Status",
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.grey600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildStatusOption(
+                  "Pending",
+                  "pending",
+                  Icons.pending_outlined,
+                  AppColors.warning,
+                  selectedStatus,
+                  (val) => setDialogState(() {
+                    selectedStatus = val;
+                    if (val == 'completed') progress = 100;
+                  }),
+                ),
+                const SizedBox(height: 6),
+                _buildStatusOption(
+                  "In Progress",
+                  "in_progress",
+                  Icons.play_circle_outline_rounded,
+                  AppColors.info,
+                  selectedStatus,
+                  (val) => setDialogState(() {
+                    selectedStatus = val;
+                    if (val == 'completed') progress = 100;
+                  }),
+                ),
+                const SizedBox(height: 6),
+                _buildStatusOption(
+                  "Completed",
+                  "completed",
+                  Icons.check_circle_outline_rounded,
+                  AppColors.success,
+                  selectedStatus,
+                  (val) => setDialogState(() {
+                    selectedStatus = val;
+                    progress = 100;
+                  }),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  "Progress: ${progress.toInt()}%",
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.grey600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: AppColors.navy,
+                    inactiveTrackColor: AppColors.grey200,
+                    thumbColor: AppColors.navy,
+                    overlayColor: AppColors.navy.withValues(alpha: 0.1),
+                  ),
+                  child: Slider(
+                    value: progress,
+                    min: 0,
+                    max: 100,
+                    divisions: 20,
+                    label: "${progress.toInt()}%",
+                    onChanged: (val) {
+                      setDialogState(() {
+                        progress = val;
+                        if (val >= 100) {
+                          selectedStatus = 'completed';
+                        } else if (val > 0 && selectedStatus == 'pending') {
+                          selectedStatus = 'in_progress';
+                        } else if (val == 0) {
+                          selectedStatus = 'pending';
+                        }
+                      });
+                    },
+                  ),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.stop_rounded, color: AppColors.error),
-              title: const Text("Stop Timer"),
-              onTap: () => _handleTimer(task['id'], false),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.inter(color: AppColors.grey400)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _updateStatus(task['id'], selectedStatus, progress.toInt());
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.navy,
+                foregroundColor: AppColors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text("Update", style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
             ),
           ],
         ),
@@ -783,42 +901,75 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     );
   }
 
-  Future<void> _updateStatus(dynamic id, String status) async {
-    Navigator.pop(context);
-    setState(() => _isLoading = true);
-    final response = await ApiService.updateEmployeeTaskStatus(id, status);
-    if (response['error'] == false) {
-      _fetchTasks();
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response['message'] ?? 'Update failed')),
-        );
-      }
-      setState(() => _isLoading = false);
-    }
+  Widget _buildStatusOption(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+    String groupValue,
+    Function(String) onChanged,
+  ) {
+    final isSelected = groupValue == value;
+    return InkWell(
+      onTap: () => onChanged(value),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.08) : AppColors.offWhite,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? color : AppColors.grey200,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: isSelected ? color : AppColors.grey400),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? color : AppColors.navy,
+                ),
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.radio_button_checked_rounded, size: 18, color: color),
+            if (!isSelected)
+              Icon(Icons.radio_button_off_rounded, size: 18, color: AppColors.grey400),
+          ],
+        ),
+      ),
+    );
   }
 
-  Future<void> _handleTimer(dynamic id, bool start) async {
-    Navigator.pop(context);
+  Future<void> _updateStatus(dynamic id, String status, [int? progressPercentage]) async {
     setState(() => _isLoading = true);
-    final response = start
-        ? await ApiService.startTaskTimer(id)
-        : await ApiService.stopTaskTimer(id);
-
+    final response = await ApiService.updateEmployeeTaskStatus(
+      id,
+      status,
+      progressPercentage: progressPercentage,
+    );
     if (response['error'] == false) {
       _fetchTasks();
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(response['message'] ?? 'Timer operation failed'),
+            content: Text(response['message'] ?? 'Update failed'),
+            backgroundColor: AppColors.error,
           ),
         );
       }
       setState(() => _isLoading = false);
     }
   }
+
+
 
   Widget _buildBadge(String text, Color color) {
     return Container(
@@ -967,7 +1118,7 @@ class _AddTaskDialogState extends State<_AddTaskDialog> {
 
     if (widget.editTask?['due_date'] != null) {
       try {
-        _selectedDueDate = DateTime.parse(widget.editTask!['due_date']);
+        _selectedDueDate = DateTime.parse(widget.editTask!['due_date']).toLocal();
       } catch (_) {}
     }
 

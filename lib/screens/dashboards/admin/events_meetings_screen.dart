@@ -66,7 +66,7 @@ class _EventsMeetingsScreenState extends State<EventsMeetingsScreen> {
       if (e[k] != null && e[k].toString().isNotEmpty) {
         final raw = e[k].toString().split(' ').first;
         try {
-          final dt = DateTime.parse(raw);
+          final dt = DateTime.parse(raw).toLocal();
           return DateFormat('dd-MM-yyyy').format(dt);
         } catch (_) {
           return raw;
@@ -83,7 +83,7 @@ class _EventsMeetingsScreenState extends State<EventsMeetingsScreen> {
       if (e[k] != null && e[k].toString().isNotEmpty) {
         final raw = e[k].toString().split(' ').first;
         try {
-          final dt = DateTime.parse(raw);
+          final dt = DateTime.parse(raw).toLocal();
           return DateFormat('dd-MM-yyyy').format(dt);
         } catch (_) {
           return raw;
@@ -407,6 +407,274 @@ class _EventsMeetingsScreenState extends State<EventsMeetingsScreen> {
     );
   }
 
+  Future<void> _showEventViewStats(dynamic id, String eventTitle) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+    final res = await ApiService.getAdminEventViewStats(id);
+    if (mounted) Navigator.pop(context); // Close loading
+
+    if (mounted) {
+      if (res['error'] == false) {
+        final rawData = res['data'];
+        final data = (rawData is Map && rawData.containsKey('data')) ? rawData['data'] : rawData;
+        List stats = [];
+        int seenCount = 0;
+        int notSeenCount = 0;
+        int totalCount = 0;
+
+        if (data is List) {
+          stats = data;
+        } else if (data is Map) {
+          stats = data['rows'] ?? data['stats'] ?? data['audience'] ?? data['users'] ?? data['data'] ?? [];
+          totalCount = int.tryParse(data['total']?.toString() ?? data['total_audience']?.toString() ?? '') ?? 0;
+          seenCount = int.tryParse(data['seen']?.toString() ?? data['seen_count']?.toString() ?? '') ?? 0;
+          notSeenCount = int.tryParse(data['pending']?.toString() ?? data['not_seen']?.toString() ?? data['not_seen_count']?.toString() ?? '') ?? 0;
+        }
+        
+        // If API didn't return pre-calculated counts, calculate them manually
+        if (totalCount == 0 && stats.isNotEmpty) {
+          for (var viewer in stats) {
+            final isSeen = viewer['seen'] == true || viewer['seen'] == 'true' || viewer['seen'] == 1 || (viewer['viewed_at'] != null && viewer['viewed_at'].toString().isNotEmpty && viewer['viewed_at'].toString() != 'null') || (viewer['status']?.toString().toLowerCase() == 'seen');
+            if (isSeen) seenCount++;
+            else notSeenCount++;
+          }
+          totalCount = stats.length;
+        }
+
+        final double seenProgress = totalCount == 0 ? 0 : seenCount / totalCount;
+
+        showDialog(
+          context: context,
+          builder: (context) {
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              insetPadding: const EdgeInsets.all(20),
+              child: Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(maxWidth: 900, maxHeight: 700),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'View Status — $eventTitle',
+                                style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.navy),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Who has opened this event / meeting',
+                                style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.redAccent),
+                          onPressed: () => Navigator.pop(context),
+                          color: Colors.redAccent.withValues(alpha: 0.1),
+                          style: IconButton.styleFrom(backgroundColor: Colors.redAccent.withValues(alpha: 0.1)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(child: _buildStatCard('Total Audience', totalCount.toString(), Colors.grey[100]!, Colors.black87)),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildStatCard('Seen', seenCount.toString(), Colors.green.withValues(alpha: 0.1), Colors.green[700]!)),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildStatCard('Not Seen', notSeenCount.toString(), Colors.red.withValues(alpha: 0.1), Colors.red[700]!)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: seenProgress,
+                        backgroundColor: Colors.grey[200],
+                        color: Colors.green[500],
+                        minHeight: 8,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[200]!),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: stats.isEmpty
+                              ? Center(child: Text('No audience data available.', style: GoogleFonts.inter(color: Colors.grey)))
+                              : SingleChildScrollView(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(minWidth: 700),
+                                      child: DataTable(
+                                        headingRowColor: WidgetStateProperty.all(const Color(0xFFF8F9FA)),
+                                        dataRowMinHeight: 52,
+                                        dataRowMaxHeight: 60,
+                                        headingRowHeight: 48,
+                                        columnSpacing: 24,
+                                        horizontalMargin: 20,
+                                        dividerThickness: 1,
+                                        columns: [
+                                          DataColumn(label: Text('Person', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.navy))),
+                                          DataColumn(label: Text('Role', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.navy))),
+                                          DataColumn(label: Text('Status', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.navy))),
+                                          DataColumn(label: Text('Viewed At', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.navy))),
+                                        ],
+                                        rows: stats.map<DataRow>((viewer) {
+                                          final viewerName = viewer['user_name'] ?? viewer['name'] ?? viewer['user']?['name'] ?? 'Unknown';
+                                          final rawRole = viewer['role'] ?? viewer['designation'] ?? 'Employee';
+                                          
+                                          String viewTime = viewer['viewed_at']?.toString() ?? '';
+                                          if (viewTime == 'null') viewTime = '';
+                                          
+                                          bool isSeen = viewer['seen'] == true || viewer['seen'] == 'true' || viewer['seen'] == 1 || viewTime.isNotEmpty || viewer['status']?.toString().toLowerCase() == 'seen';
+                                          
+                                          if (viewTime.isNotEmpty) {
+                                            try {
+                                              if (viewTime.contains('T') || viewTime.contains('-')) {
+                                                viewTime = DateFormat('dd MMM yyyy hh:mm a').format(DateTime.parse(viewTime).toLocal());
+                                              }
+                                            } catch (_) {}
+                                          } else {
+                                            viewTime = '—';
+                                          }
+
+                                          Color roleColor = Colors.green[700]!;
+                                          final roleLower = rawRole.toString().toLowerCase();
+                                          if (roleLower.contains('admin')) roleColor = Colors.red[700]!;
+                                          else if (roleLower.contains('manager')) roleColor = Colors.orange[800]!;
+
+                                          return DataRow(
+                                            color: WidgetStateProperty.all(!isSeen ? Colors.orange.withValues(alpha: 0.06) : Colors.white),
+                                            cells: [
+                                              DataCell(
+                                                SizedBox(
+                                                  width: 160,
+                                                  child: Text(
+                                                    viewerName.toString(),
+                                                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black87),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ),
+                                              DataCell(
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                  decoration: BoxDecoration(
+                                                    color: roleColor,
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    rawRole.toString(),
+                                                    style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                                                  ),
+                                                ),
+                                              ),
+                                              DataCell(
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                  decoration: BoxDecoration(
+                                                    color: isSeen ? Colors.green[600] : Colors.red[600],
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(isSeen ? Icons.check_circle_outline : Icons.access_time_rounded, color: Colors.white, size: 14),
+                                                      const SizedBox(width: 5),
+                                                      Text(
+                                                        isSeen ? 'Seen' : 'Not Seen',
+                                                        style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              DataCell(
+                                                SizedBox(
+                                                  width: 200,
+                                                  child: Text(
+                                                    viewTime,
+                                                    style: GoogleFonts.inter(
+                                                      fontWeight: FontWeight.w600,
+                                                      fontSize: 13,
+                                                      color: isSeen ? Colors.green[700] : Colors.grey[500],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: Text('Close', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'] ?? 'Failed to load stats'), backgroundColor: AppColors.error));
+      }
+    }
+  }
+
+  Widget _buildStatCard(String title, String value, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: [
+          Text(title, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[600])),
+          const SizedBox(height: 8),
+          Text(value, style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w800, color: textColor)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -512,6 +780,13 @@ class _EventsMeetingsScreenState extends State<EventsMeetingsScreen> {
                 rows: _events.asMap().entries.map((entry) {
                   final idx = entry.key;
                   final event = entry.value;
+                  final rawCreator = event['creator_name'] ?? event['created_by_name'] ?? event['user_name'] ?? event['user']?['name'] ?? event['creator']?['name'] ?? event['created_by']?['name'] ?? event['user_fullname'] ?? 'Admin';
+                  final creatorName = rawCreator.toString();
+                  final creatorId = event['user_id']?.toString() ?? event['created_by_id']?.toString() ?? event['created_by']?.toString();
+                  
+                  final bool isSelf = (_currentUserId != null && creatorId == _currentUserId) || 
+                                    (_currentUserName != null && creatorName.toLowerCase() == _currentUserName!.toLowerCase());
+
                   return DataRow(
                     cells: [
                       DataCell(Text((idx + 1).toString(), style: GoogleFonts.inter(fontSize: 13))),
@@ -519,25 +794,20 @@ class _EventsMeetingsScreenState extends State<EventsMeetingsScreen> {
                         event['title']?.toString() ?? '',
                         style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.navy),
                       )),
-                      DataCell(Builder(builder: (context) {
-                        final rawCreator = event['creator_name'] ?? event['created_by_name'] ?? event['user_name'] ?? event['user']?['name'] ?? event['creator']?['name'] ?? event['created_by']?['name'] ?? event['user_fullname'] ?? 'Admin';
-                        final creatorName = rawCreator.toString();
-                        final creatorId = event['user_id']?.toString() ?? event['created_by_id']?.toString() ?? event['created_by']?.toString();
-                        
-                        final bool isSelf = (_currentUserId != null && creatorId == _currentUserId) || 
-                                          (_currentUserName != null && creatorName.toLowerCase() == _currentUserName!.toLowerCase());
-                        
-                        return Text(
-                          isSelf ? 'Self' : creatorName,
-                          style: GoogleFonts.inter(fontSize: 12, fontWeight: isSelf ? FontWeight.w700 : FontWeight.w500, color: isSelf ? AppColors.success : AppColors.grey600),
-                        );
-                      })),
+                      DataCell(Text(
+                        isSelf ? 'Self' : creatorName,
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: isSelf ? FontWeight.w700 : FontWeight.w500, color: isSelf ? AppColors.success : AppColors.grey600),
+                      )),
                       DataCell(Text(_formatDate(event), style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600))),
                       DataCell(Text(_formatEndDate(event), style: GoogleFonts.inter(fontSize: 12, color: AppColors.grey600))),
                       DataCell(_buildVisibilityBadge(_getVisibility(event))),
                       DataCell(Row(
                         children: [
                           _actionIcon(Icons.visibility_outlined, AppColors.info, 'View', () => _showEventDetails(event)),
+                          if (isSelf) ...[
+                            const SizedBox(width: 6),
+                            _actionIcon(Icons.people_alt_outlined, AppColors.navy, 'View Stats', () => _showEventViewStats(event['id'], event['title']?.toString() ?? 'Event')),
+                          ],
                           const SizedBox(width: 6),
                           _actionIcon(Icons.edit_outlined, AppColors.goldDark, 'Edit', () => _showEventSheet(event: event)),
                           const SizedBox(width: 6),

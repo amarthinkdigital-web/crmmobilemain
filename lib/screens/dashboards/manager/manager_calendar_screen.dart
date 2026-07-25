@@ -61,9 +61,20 @@ class _ManagerCalendarScreenState extends State<ManagerCalendarScreen> {
   ) {
     return list.where((item) {
       final dStr = item[dateKey]?.toString() ?? '';
-      final d = DateTime.tryParse(dStr);
-      if (d == null) return false;
-      return d.year == date.year && d.month == date.month && d.day == date.day;
+      DateTime? start = DateTime.tryParse(dStr);
+      if (start == null) return false;
+      start = start.toLocal();
+
+      String? endStr = item['end_date']?.toString() ?? item['endDate']?.toString() ?? item['to_date']?.toString() ?? item['leave_to']?.toString();
+      DateTime? end = endStr != null && endStr.isNotEmpty ? DateTime.tryParse(endStr) : null;
+      end = end?.toLocal() ?? start;
+
+      DateTime targetDateOnly = DateTime(date.year, date.month, date.day);
+      DateTime startDateOnly = DateTime(start.year, start.month, start.day);
+      DateTime endDateOnly = DateTime(end.year, end.month, end.day);
+
+      return (targetDateOnly.isAtSameMomentAs(startDateOnly) || targetDateOnly.isAfter(startDateOnly)) &&
+             (targetDateOnly.isAtSameMomentAs(endDateOnly) || targetDateOnly.isBefore(endDateOnly));
     }).toList();
   }
 
@@ -347,7 +358,7 @@ class _ManagerCalendarScreenState extends State<ManagerCalendarScreen> {
               e['start_date'] != null
                   ? DateFormat(
                       'hh:mm a',
-                    ).format(DateTime.parse(e['start_date']))
+                    ).format(DateTime.parse(e['start_date']).toLocal())
                   : 'All Day',
               AppColors.gold,
               Icons.meeting_room_rounded,
