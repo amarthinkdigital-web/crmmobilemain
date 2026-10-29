@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/auth_service.dart';
+import '../crm_info_card.dart';
 
 class AdminDashboard extends StatefulWidget {
   final Function(int)? onNavigate;
@@ -61,6 +62,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildProfileHeader(),
+            const SizedBox(height: 24),
+            const CrmInfoCard(),
           ],
         ),
       ),
@@ -185,9 +188,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.gold.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -203,7 +210,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Text(
                       _userName,
                       style: GoogleFonts.inter(
@@ -216,13 +223,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                     const SizedBox(height: 8),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.admin_panel_settings_rounded,
-                          color: AppColors.gold.withValues(alpha: 0.7),
-                          size: 14,
-                        ),
-                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -235,18 +237,30 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               color: Colors.white.withValues(alpha: 0.1),
                             ),
                           ),
-                          child: Text(
-                            _userRole.toUpperCase(),
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white.withValues(alpha: 0.9),
-                              letterSpacing: 1,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.admin_panel_settings_rounded,
+                                color: AppColors.gold.withValues(alpha: 0.7),
+                                size: 12,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _userRole.toUpperCase(),
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
                   ],
                 ),
               ),

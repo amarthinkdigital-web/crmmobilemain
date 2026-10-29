@@ -4,6 +4,36 @@ import 'package:intl/intl.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/api_service.dart';
 
+// Backend stores rich-text (HTML) in worksheet fields — strip tags for display.
+String _stripHtml(String? input) {
+  if (input == null || input.isEmpty) return '';
+  var text = input;
+  // Block/line-break tags become newlines
+  text = text.replaceAll(RegExp(r'<\s*br\s*/?\s*>', caseSensitive: false), '\n');
+  text = text.replaceAll(
+      RegExp(r'</\s*(p|div|li|h[1-6]|tr)\s*>', caseSensitive: false), '\n');
+  // Drop any remaining tags
+  text = text.replaceAll(RegExp(r'<[^>]*>'), '');
+  // Decode common HTML entities
+  text = text
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'")
+      .replaceAll('&apos;', "'")
+      .replaceAll('&rsquo;', '’')
+      .replaceAll('&lsquo;', '‘')
+      .replaceAll('&hellip;', '…')
+      .replaceAll('&mdash;', '—')
+      .replaceAll('&ndash;', '–');
+  // Collapse excess blank lines
+  text = text.replaceAll(RegExp(r'[ \t]+\n'), '\n');
+  text = text.replaceAll(RegExp(r'\n\s*\n\s*\n+'), '\n\n');
+  return text.trim();
+}
+
 class DailyWorkLogScreen extends StatefulWidget {
   const DailyWorkLogScreen({super.key});
 
@@ -11,11 +41,9 @@ class DailyWorkLogScreen extends StatefulWidget {
   State<DailyWorkLogScreen> createState() => _DailyWorkLogScreenState();
 }
 
-class _DailyWorkLogScreenState extends State<DailyWorkLogScreen>
-    with SingleTickerProviderStateMixin {
+class _DailyWorkLogScreenState extends State<DailyWorkLogScreen> {
   List<Map<String, dynamic>> _worksheets = [];
   bool _isLoading = true;
-  late TabController _tabController;
 
   int _total = 0, _pending = 0, _approved = 0, _rejected = 0;
   String _activeFilter = 'all'; // all, pending, approved, rejected
@@ -23,20 +51,7 @@ class _DailyWorkLogScreenState extends State<DailyWorkLogScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) {
-        final filters = ['all', 'pending', 'approved', 'rejected'];
-        setState(() => _activeFilter = filters[_tabController.index]);
-      }
-    });
     _fetchWorksheets();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _fetchWorksheets() async {
@@ -96,10 +111,10 @@ class _DailyWorkLogScreenState extends State<DailyWorkLogScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-                    _buildStatCards(),
+                    _buildFilterCards(),
                     const SizedBox(height: 20),
-                    _buildTabBar(),
-                    const SizedBox(height: 16),
+                    _buildListHeader(),
+                    const SizedBox(height: 12),
                     _isLoading
                         ? const Center(
                             child: Padding(
@@ -177,40 +192,74 @@ class _DailyWorkLogScreenState extends State<DailyWorkLogScreen>
     );
   }
 
-  Widget _buildStatCards() {
-    return Row(
-      children: [
-        _buildStatCard('Total', _total, const Color(0xFF0D2137), Colors.blueGrey.shade50),
-        const SizedBox(width: 12),
-        _buildStatCard('Pending', _pending, Colors.orange, Colors.orange.shade50),
-        const SizedBox(width: 12),
-        _buildStatCard('Approved', _approved, Colors.green, Colors.green.shade50),
-        const SizedBox(width: 12),
-        _buildStatCard('Rejected', _rejected, Colors.red, Colors.red.shade50),
-      ],
+  Widget _buildFilterCards() {
+    final items = <({String label, String key, int count})>[
+      (label: 'Total', key: 'all', count: _total),
+      (label: 'Pending', key: 'pending', count: _pending),
+      (label: 'Approved', key: 'approved', count: _approved),
+      (label: 'Rejected', key: 'rejected', count: _rejected),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Row(
+        children: items.asMap().entries.map((entry) {
+          final item = entry.value;
+          final isActive = _activeFilter == item.key;
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: entry.key < items.length - 1 ? 6 : 0),
+              child: _buildFilterSegment(item.label, item.count, isActive, item.key),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 
-  Widget _buildStatCard(String label, int count, Color accent, Color bg) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
+  Widget _buildFilterSegment(String label, int count, bool isActive, String key) {
+    return GestureDetector(
+      onTap: () => setState(() => _activeFilter = key),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border(top: BorderSide(color: accent, width: 3)),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
-          ],
+          color: isActive ? AppColors.navy.withValues(alpha: 0.06) : Colors.transparent,
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: isActive ? AppColors.navy : Colors.transparent),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500)),
-            const SizedBox(height: 4),
             Text(
               count.toString(),
-              style: GoogleFonts.inter(fontSize: 26, fontWeight: FontWeight.w900, color: const Color(0xFF0D2137)),
+              style: GoogleFonts.inter(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+                color: AppColors.navy,
+              ),
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? AppColors.navy : Colors.grey[600],
+                ),
+              ),
             ),
           ],
         ),
@@ -218,54 +267,35 @@ class _DailyWorkLogScreenState extends State<DailyWorkLogScreen>
     );
   }
 
-  Widget _buildTabBar() {
-    final tabs = [
-      ('All', _total, Colors.blue),
-      ('Pending', _pending, Colors.orange),
-      ('Approved', _approved, Colors.green),
-      ('Rejected', _rejected, Colors.red),
-    ];
+  Widget _buildListHeader() {
+    final label = _activeFilter == 'all'
+        ? 'All Worksheets'
+        : '${_activeFilter[0].toUpperCase()}${_activeFilter.substring(1)} Worksheets';
     return Row(
-      children: tabs.asMap().entries.map((entry) {
-        final i = entry.key;
-        final (label, count, color) = entry.value;
-        final isActive = _tabController.index == i;
-        return Expanded(
-          child: GestureDetector(
-            onTap: () {
-              _tabController.animateTo(i);
-              setState(() => _activeFilter = ['all', 'pending', 'approved', 'rejected'][i]);
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: EdgeInsets.only(right: i < 3 ? 8 : 0),
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-              decoration: BoxDecoration(
-                color: isActive ? color.withValues(alpha: 0.15) : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: isActive ? color : Colors.grey.shade200, width: isActive ? 1.5 : 1),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (isActive) ...[
-                    Icon(Icons.circle, size: 8, color: color),
-                    const SizedBox(width: 5),
-                  ],
-                  Text(
-                    '$label $count',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                      color: isActive ? color : Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.navy.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(20),
           ),
-        );
-      }).toList(),
+          child: Text(
+            '${_filteredWorksheets.length}',
+            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.navy),
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: _isLoading ? null : _fetchWorksheets,
+          tooltip: 'Refresh',
+          icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.navy),
+        ),
+      ],
     );
   }
 
@@ -373,7 +403,7 @@ class _DailyWorkLogScreenState extends State<DailyWorkLogScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    projectDisplay,
+                    _stripHtml(projectDisplay),
                     style: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 2,
@@ -501,7 +531,7 @@ class _SubmitWorksheetScreenState extends State<SubmitWorksheetScreen> {
       if (w['work_date'] != null) {
         _workDate = (DateTime.tryParse(w['work_date'].toString()) ?? _workDate).toLocal();
       }
-      _otherWorkController.text = w['other_work']?.toString() ?? '';
+      _otherWorkController.text = _stripHtml(w['other_work']?.toString());
     }
   }
 
@@ -526,9 +556,9 @@ class _SubmitWorksheetScreenState extends State<SubmitWorksheetScreen> {
               if (matched != null && !_selectedProjects.any((s) => s['id'] == matched['id'])) {
                 _selectedProjects.add(matched);
                 final id = matched['id'] as int;
-                _todaysWorkControllers[id] = TextEditingController(text: ep['todays_work'] ?? '');
+                _todaysWorkControllers[id] = TextEditingController(text: _stripHtml(ep['todays_work']?.toString()));
                 // Backend uses 'next_step', not 'next_plan'
-                _nextPlanControllers[id] = TextEditingController(text: ep['next_step'] ?? ep['next_plan'] ?? '');
+                _nextPlanControllers[id] = TextEditingController(text: _stripHtml((ep['next_step'] ?? ep['next_plan'])?.toString()));
               }
             }
           }
@@ -1469,11 +1499,11 @@ class _ViewWorksheetDialog extends StatelessWidget {
     try { displayDate = DateFormat('dd MMM yyyy, EEEE').format(DateTime.parse(workDate).toLocal()); } catch (_) {}
     // Backend uses 'items' for multi-project worksheets
     final items = w['items'] as List? ?? w['projects'] as List? ?? [];
-    final otherWork = w['other_work']?.toString() ?? '';
+    final otherWork = _stripHtml(w['other_work']?.toString());
     final submittedTo = w['team_leader']?['name'] ?? w['user']?['team_leader']?['name'] ?? '—';
     final reviewedBy = w['approver']?['name'] ?? w['reviewed_by']?['name'] ?? '—';
     // Backend uses 'leader_comment', not 'feedback' or 'reviewer_feedback'
-    final feedback = w['leader_comment']?.toString() ?? w['feedback']?.toString() ?? w['reviewer_feedback']?.toString() ?? '';
+    final feedback = _stripHtml(w['leader_comment']?.toString() ?? w['feedback']?.toString() ?? w['reviewer_feedback']?.toString());
     final status = (w['approval_status'] ?? w['status'] ?? 'pending').toString().toLowerCase();
 
     Color statusColor = Colors.orange;
@@ -1552,17 +1582,17 @@ class _ViewWorksheetDialog extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(p['project_name'] ?? p['project']?['name'] ?? p['name'] ?? 'Project', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.navy)),
+                            Text(_stripHtml(p['project_name'] ?? p['project']?['name'] ?? p['name'] ?? 'Project'), style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.navy)),
                             if (p['todays_work']?.toString().isNotEmpty == true) ...[
                               const SizedBox(height: 8),
                               Text("Today's Work:", style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[600])),
-                              Text(p['todays_work'].toString(), style: GoogleFonts.inter(fontSize: 13)),
+                              Text(_stripHtml(p['todays_work']?.toString()), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                             // Backend uses 'next_step', not 'next_plan'
                             if ((p['next_step'] ?? p['next_plan'])?.toString().isNotEmpty == true) ...[
                               const SizedBox(height: 8),
                               Text("Next Plan:", style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[600])),
-                              Text((p['next_step'] ?? p['next_plan']).toString(), style: GoogleFonts.inter(fontSize: 13)),
+                              Text(_stripHtml((p['next_step'] ?? p['next_plan'])?.toString()), style: GoogleFonts.inter(fontSize: 13)),
                             ],
                           ],
                         ),

@@ -459,14 +459,20 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
-    final response = await ApiService.getSalaryDetails(id);
+    final response = await ApiService.getManagerSalaryDetails(id);
+    if (!mounted) return;
     Navigator.pop(context);
 
     if (response['error'] == false) {
       final Salary details = Salary.fromJson(response['data']);
       _showExecutiveBreakdownModal(details);
     } else {
-      _showError(response['message'] ?? "Failed to load details");
+      final local = _salaries.where((s) => s.id == id).toList();
+      if (local.isNotEmpty) {
+        _showExecutiveBreakdownModal(local.first);
+      } else {
+        _showError(response['message'] ?? "Failed to load details");
+      }
     }
   }
 
@@ -497,14 +503,38 @@ class _ManagerSalaryScreenState extends State<ManagerSalaryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  "$monthName Remuneration Audit",
-                  style: GoogleFonts.inter(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.navy,
+                Expanded(
+                  child: Text(
+                    "$monthName Remuneration Audit",
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: "Download Salary Slip",
+                  child: OutlinedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.download_rounded, size: 16),
+                    label: const Text("Download"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.navy,
+                      side: BorderSide(color: AppColors.grey200),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
                 ),
                 IconButton(

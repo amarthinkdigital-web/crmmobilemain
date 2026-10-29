@@ -279,8 +279,8 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           "Tasks Management",
@@ -291,6 +291,7 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
             letterSpacing: -0.5,
           ),
         ),
+        const SizedBox(height: 12),
         ElevatedButton.icon(
           onPressed: () => _showAddTaskDialog(),
           icon: const Icon(Icons.add_rounded, size: 20),
@@ -522,7 +523,9 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
     Function(String?) onChanged,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         color: AppColors.offWhite,
         borderRadius: BorderRadius.circular(10),
@@ -532,19 +535,23 @@ class _ManagerAssignmentsScreenState extends State<ManagerAssignmentsScreen> {
         child: DropdownButton<String>(
           isExpanded: true,
           value: value,
-          isDense: true,
           icon: const Icon(
             Icons.keyboard_arrow_down_rounded,
             color: AppColors.grey600,
             size: 20,
           ),
           style: GoogleFonts.inter(
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.w600,
             color: AppColors.navy,
           ),
           items: items
-              .map((String e) => DropdownMenuItem(value: e, child: Text(e)))
+              .map(
+                (String e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(e, overflow: TextOverflow.ellipsis),
+                ),
+              )
               .toList(),
           onChanged: onChanged,
         ),

@@ -132,6 +132,7 @@ class DashboardScreenState extends State<DashboardScreen>
       _dashboards = [
         {'name': 'My Dashboard', 'icon': Icons.dashboard_rounded},
         {'name': 'Calendar', 'icon': Icons.calendar_today_rounded},
+        {'name': 'Events', 'icon': Icons.event_rounded},
         {
           'name': 'Personal Tools',
           'icon': Icons.person_rounded,
@@ -198,33 +199,6 @@ class DashboardScreenState extends State<DashboardScreen>
           'icon': Icons.time_to_leave_rounded,
           'isSub': true,
         },
-        {
-          'name': 'Business Operations',
-          'icon': Icons.business_center_rounded,
-          'isHeader': true,
-        },
-        {
-          'name': 'Business Leads',
-          'icon': Icons.leaderboard_rounded,
-          'isSub': true,
-        },
-        {
-          'name': 'Client Directory',
-          'icon': Icons.contact_mail_rounded,
-          'isSub': true,
-        },
-        {
-          'name': 'Project Details',
-          'icon': Icons.rocket_launch_rounded,
-          'isSub': true,
-        },
-        {
-          'name': 'Support Tickets',
-          'icon': Icons.confirmation_number_rounded,
-          'isSub': true,
-        },
-        {'name': 'Events', 'icon': Icons.event_rounded},
-
         {'name': 'Company Holidays', 'icon': Icons.beach_access_rounded},
       ];
     } else if (role == 'admin') {
@@ -232,11 +206,14 @@ class DashboardScreenState extends State<DashboardScreen>
         {'name': 'Admin Console', 'icon': Icons.dashboard_rounded},
         {'name': 'Calendar', 'icon': Icons.calendar_today_rounded},
         {
+          'name': 'Events & Meetings',
+          'icon': Icons.event_available_rounded,
+        },
+        {
           'name': 'Team Management',
           'icon': Icons.business_rounded,
           'isHeader': true,
         },
-        {'name': 'Departments', 'icon': Icons.domain_rounded, 'isSub': true},
         {
           'name': 'Manager Profile',
           'icon': Icons.domain_rounded,
@@ -245,11 +222,6 @@ class DashboardScreenState extends State<DashboardScreen>
         {
           'name': 'Employee Profile',
           'icon': Icons.domain_rounded,
-          'isSub': true,
-        },
-        {
-          'name': 'Events & Meetings',
-          'icon': Icons.event_available_rounded,
           'isSub': true,
         },
         {
@@ -292,34 +264,6 @@ class DashboardScreenState extends State<DashboardScreen>
           'icon': Icons.people_alt_rounded,
           'isSub': true,
         },
-        {
-          'name': 'Rejected Records',
-          'icon': Icons.cancel_schedule_send_rounded,
-          'isSub': true,
-        },
-        {'name': 'Recruitment', 'icon': Icons.person_search_rounded},
-        {
-          'name': 'Services Management',
-          'icon': Icons.settings_input_component_rounded,
-          'isHeader': true,
-        },
-        {
-          'name': 'Service Domains',
-          'icon': Icons.domain_rounded,
-          'isSub': true,
-        },
-        {'name': 'Service Hosting', 'icon': Icons.dns_rounded, 'isSub': true},
-        {
-          'name': 'Financials',
-          'icon': Icons.receipt_long_rounded,
-          'isHeader': true,
-        },
-        {'name': 'Invoice List', 'icon': Icons.list_alt_rounded, 'isSub': true},
-        {
-          'name': 'Create Invoice',
-          'icon': Icons.add_chart_rounded,
-          'isSub': true,
-        },
         {'name': 'Holiday Calendar', 'icon': Icons.beach_access_rounded},
       ];
     } else {
@@ -327,13 +271,13 @@ class DashboardScreenState extends State<DashboardScreen>
       _dashboards = [
         {'name': 'My Workspace', 'icon': Icons.dashboard_rounded},
         {'name': 'Calendar', 'icon': Icons.calendar_today_rounded},
+        {'name': 'Events', 'icon': Icons.event_rounded},
         {'name': 'Attendance Log', 'icon': Icons.history_rounded},
         {'name': 'Corrections', 'icon': Icons.edit_calendar_rounded},
         {'name': 'My Worksheet List', 'icon': Icons.description_rounded},
         {'name': 'Task Management', 'icon': Icons.assignment_rounded},
         {'name': 'Apply for Leave', 'icon': Icons.time_to_leave_rounded},
         {'name': 'My Salary', 'icon': Icons.payments_rounded},
-        {'name': 'Events', 'icon': Icons.event_rounded},
         {'name': 'Company Holidays', 'icon': Icons.beach_access_rounded},
       ];
     }

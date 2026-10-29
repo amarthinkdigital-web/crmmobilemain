@@ -3,8 +3,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
+import 'screens/preloader_screen.dart';
 import 'services/auth_service.dart';
-import 'services/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,35 +24,11 @@ class _CRMAppState extends State<CRMApp> {
   String _userName = '';
   String _userEmail = '';
   String _userRole = '';
+  bool _showPreloader = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _checkAuth();
-  }
-
-  Future<void> _checkAuth() async {
-    final token = await AuthService.getToken();
-    if (token != null) {
-      // Verify account status is still active
-      final profileRes = await ApiService.getUserProfile();
-      final profileUser = profileRes['user'] as Map<String, dynamic>? ?? {};
-      final accountStatus = (profileUser['status'] ?? '').toString().toLowerCase();
-      if (accountStatus == 'terminate' || accountStatus == 'terminated' || accountStatus == 'resigned') {
-        await AuthService.clearAuth();
-        return;
-      }
-
-      final name = await AuthService.getUserName();
-      final email = await AuthService.getUserEmail();
-      final role = await AuthService.getUserRole();
-      setState(() {
-        _isLoggedIn = true;
-        _userName = name ?? 'User';
-        _userEmail = email ?? '';
-        _userRole = role ?? 'Employee';
-      });
-    }
+  void _onPreloaderComplete() {
+    if (!mounted) return;
+    setState(() => _showPreloader = false);
   }
 
   void _onLoginSuccess(String name, String email, String role) {
@@ -76,18 +52,43 @@ class _CRMAppState extends State<CRMApp> {
 
   @override
   Widget build(BuildContext context) {
+    final Widget home = _isLoggedIn
+        ? MainNavigationScreen(
+            key: const ValueKey('dashboard'),
+            userName: _userName,
+            userEmail: _userEmail,
+            userRole: _userRole,
+            onLogout: _onLogout,
+          )
+        : LoginScreen(
+            key: const ValueKey('login'),
+            onLoginSuccess: _onLoginSuccess,
+          );
+
     return MaterialApp(
       title: 'ThinkDigital',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: _isLoggedIn
-          ? MainNavigationScreen(
-              userName: _userName,
-              userEmail: _userEmail,
-              userRole: _userRole,
-              onLogout: _onLogout,
-            )
-          : LoginScreen(onLoginSuccess: _onLoginSuccess),
+      home: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 500),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              ...previousChildren,
+              ?currentChild,
+            ],
+          );
+        },
+        child: _showPreloader
+            ? PreloaderScreen(
+                key: const ValueKey('preloader'),
+                onComplete: _onPreloaderComplete,
+              )
+            : home,
+      ),
     );
   }
 }

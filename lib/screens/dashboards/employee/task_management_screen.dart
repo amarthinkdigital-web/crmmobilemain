@@ -209,37 +209,29 @@ class _TaskManagementScreenState extends State<TaskManagementScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final bool isSmall = constraints.maxWidth < 600;
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Task Management",
-                    style: GoogleFonts.inter(
-                      fontSize: isSmall ? 20 : 24,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.navy,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Manage and track all your tasks",
-                    style: GoogleFonts.inter(
-                      fontSize: isSmall ? 12 : 14,
-                      color: AppColors.grey400,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+            Text(
+              "Task Management",
+              style: GoogleFonts.inter(
+                fontSize: isSmall ? 20 : 24,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+                letterSpacing: -0.5,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(height: 4),
+            Text(
+              "Manage and track all your tasks",
+              style: GoogleFonts.inter(
+                fontSize: isSmall ? 12 : 14,
+                color: AppColors.grey400,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: _showAddTaskDialog,
               icon: Icon(Icons.add_rounded, size: isSmall ? 18 : 20),

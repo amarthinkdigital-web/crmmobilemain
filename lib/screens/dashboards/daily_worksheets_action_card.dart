@@ -5,8 +5,7 @@ import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import 'manager/manager_work_log_screen.dart';
 import 'hr/team_pending_approvals_screen.dart';
-import 'hr/team_reviewed_records_screen.dart';
-import 'hr/all_review_records_screen.dart';
+
 import 'employee/daily_work_log_screen.dart';
 
 class DailyWorksheetsActionCard extends StatefulWidget {
@@ -93,26 +92,29 @@ class _DailyWorksheetsActionCardState extends State<DailyWorksheetsActionCard> {
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Daily Worksheets",
-                    style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.navy,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Daily Worksheets",
+                      style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
                     ),
-                  ),
-                  Text(
-                    "Manage your work logs and team reviews",
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppColors.grey400,
-                      fontWeight: FontWeight.w500,
+                    Text(
+                      "Manage your work logs and team reviews",
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.grey400,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const Spacer(),
               if (_isLoading)
@@ -163,32 +165,7 @@ class _DailyWorksheetsActionCardState extends State<DailyWorksheetsActionCard> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionCard(
-                  title: "Team Reviewed",
-                  icon: Icons.history_rounded,
-                  color: AppColors.success,
-                  onTap: () {
-                    _navigateTo(const TeamReviewedRecordsScreen());
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildActionCard(
-                  title: "All Records",
-                  icon: Icons.folder_special_rounded,
-                  color: AppColors.navy,
-                  onTap: () {
-                    _navigateTo(const AllReviewRecordsScreen());
-                  },
-                ),
-              ),
-            ],
-          ),
+
         ],
       ),
     );
