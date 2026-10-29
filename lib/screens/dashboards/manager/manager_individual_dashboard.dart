@@ -4,6 +4,7 @@ import '../../../theme/app_theme.dart';
 import '../../../services/auth_service.dart';
 import '../attendance_action_card.dart';
 import '../daily_worksheets_action_card.dart';
+import '../crm_info_card.dart';
 class ManagerIndividualDashboard extends StatefulWidget {
   final String userName;
   const ManagerIndividualDashboard({super.key, required this.userName});
@@ -65,6 +66,8 @@ class _ManagerIndividualDashboardState
             const AttendanceActionCard(),
             const SizedBox(height: 24),
             const DailyWorksheetsActionCard(),
+            const SizedBox(height: 24),
+            const CrmInfoCard(),
           ],
         ),
       ),
@@ -189,9 +192,13 @@ class _ManagerIndividualDashboardState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.gold.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -207,7 +214,7 @@ class _ManagerIndividualDashboardState
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Text(
                       widget.userName,
                       style: GoogleFonts.inter(
@@ -220,13 +227,8 @@ class _ManagerIndividualDashboardState
                     ),
                     const SizedBox(height: 8),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.shield_rounded,
-                          color: AppColors.gold.withValues(alpha: 0.7),
-                          size: 14,
-                        ),
-                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -239,18 +241,30 @@ class _ManagerIndividualDashboardState
                               color: Colors.white.withValues(alpha: 0.1),
                             ),
                           ),
-                          child: Text(
-                            _userRole.toUpperCase(),
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white.withValues(alpha: 0.9),
-                              letterSpacing: 1,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.shield_rounded,
+                                color: AppColors.gold.withValues(alpha: 0.7),
+                                size: 12,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _userRole.toUpperCase(),
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
                   ],
                 ),
               ),

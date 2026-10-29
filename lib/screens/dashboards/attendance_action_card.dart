@@ -23,6 +23,8 @@ class _AttendanceActionCardState extends State<AttendanceActionCard>
   Map<String, dynamic>? _todayRecord;
   String _status = "Loading...";
   Timer? _refreshTimer;
+  Timer? _liveTimer;
+  Duration _elapsed = Duration.zero;
 
   @override
   void initState() {
@@ -33,6 +35,10 @@ class _AttendanceActionCardState extends State<AttendanceActionCard>
     // the mobile app picks it up automatically without manual restart.
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) _fetchStatus();
+    });
+    // Live elapsed timer — ticks every second
+    _liveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) _tickTimer();
     });
   }
 
@@ -48,7 +54,22 @@ class _AttendanceActionCardState extends State<AttendanceActionCard>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
+    _liveTimer?.cancel();
     super.dispose();
+  }
+
+  void _tickTimer() {
+    final record = _todayRecord;
+    if (record == null ||
+        record['clock_in'] == null ||
+        record['clock_out'] != null) {
+      if (_elapsed != Duration.zero) setState(() => _elapsed = Duration.zero);
+      return;
+    }
+    final clockIn =
+        DateTime.tryParse(record['clock_in'].toString())?.toLocal();
+    if (clockIn == null) return;
+    setState(() => _elapsed = DateTime.now().difference(clockIn));
   }
 
   Future<void> _fetchStatus() async {
@@ -60,6 +81,7 @@ class _AttendanceActionCardState extends State<AttendanceActionCard>
         if (res['error'] == false) {
           _todayRecord = res['data'];
           _updateStatusText();
+          _tickTimer();
         } else {
           _status = "Error loading status";
         }
@@ -319,6 +341,107 @@ class _AttendanceActionCardState extends State<AttendanceActionCard>
             ),
           ),
           const Divider(height: 1),
+          // ── Live Work Duration Timer ──
+          if (_todayRecord != null &&
+              _todayRecord!['clock_in'] != null &&
+              _todayRecord!['clock_out'] == null)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding:
+                  const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.navy.withValues(alpha: 0.05),
+                    AppColors.success.withValues(alpha: 0.05),
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: AppColors.success.withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.timer_outlined,
+                        color: AppColors.success, size: 16),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Work Duration",
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.grey400,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        _formatElapsed(_elapsed),
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.success,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  _PulsingDot(),
+                ],
+              ),
+            ),
+          // ── Total Worked (after clock-out) ──
+          if (_todayRecord != null && _todayRecord!['clock_out'] != null)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding:
+                  const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+              decoration: BoxDecoration(
+                color: AppColors.info.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: AppColors.info.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline,
+                      color: AppColors.info, size: 18),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Total Worked",
+                          style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.grey400)),
+                      Text(
+                        _calcTotalWorked(),
+                        style: GoogleFonts.jetBrainsMono(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.info),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -457,21 +580,85 @@ class _AttendanceActionCardState extends State<AttendanceActionCard>
 
   String _formatTime(String timeStr) {
     try {
-      // Handle cases like "09:00:00" or ISO "2024-03-25T09:00:00.000000Z"
       if (timeStr.contains('T')) {
-        return DateFormat('hh:mm A').format(DateTime.parse(timeStr).toLocal());
+        return DateFormat('hh:mm a').format(
+            DateTime.parse(timeStr).toLocal());
       }
-      // If it's just "09:00:00"
       final parts = timeStr.split(':');
       if (parts.length >= 2) {
         final hour = int.parse(parts[0]);
         final min = int.parse(parts[1]);
         final dt = DateTime(2024, 1, 1, hour, min);
-        return DateFormat('hh:mm A').format(dt);
+        return DateFormat('hh:mm a').format(dt);
       }
       return timeStr;
     } catch (_) {
       return timeStr;
     }
+  }
+
+  String _formatElapsed(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
+  String _calcTotalWorked() {
+    final r = _todayRecord;
+    if (r == null) return '00:00:00';
+    final cin =
+        DateTime.tryParse(r['clock_in']?.toString() ?? '')?.toLocal();
+    final cout =
+        DateTime.tryParse(r['clock_out']?.toString() ?? '')?.toLocal();
+    if (cin == null || cout == null) return '00:00:00';
+    return _formatElapsed(cout.difference(cin));
+  }
+}
+
+// ── Pulsing animated green dot ──────────────────────────────────────────────
+class _PulsingDot extends StatefulWidget {
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _anim = Tween(begin: 0.35, end: 1.0)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Opacity(
+        opacity: _anim.value,
+        child: Container(
+          width: 10,
+          height: 10,
+          decoration: const BoxDecoration(
+            color: AppColors.success,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
   }
 }

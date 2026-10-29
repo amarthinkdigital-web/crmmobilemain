@@ -1,7 +1,7 @@
 name: crm_thinkdigital
 description: "ThinkDigital CRM - Time Tracker"
 publish_to: "none"
-version: 1.0.1+4
+version: 1.0.2+5
 
 environment:
   sdk: ^3.11.0
@@ -17,6 +17,7 @@ dependencies:
   intl: ^0.20.2
   network_info_plus: ^6.1.1
   permission_handler: ^11.3.1
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

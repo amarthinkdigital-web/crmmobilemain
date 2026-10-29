@@ -187,7 +187,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
           child: _timingCard(
             "Shift Timing",
             "09:00 AM - 06:00 PM",
-            Icons.access_time_filled_rounded,
             AppColors.navy,
           ),
         ),
@@ -196,7 +195,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
           child: _timingCard(
             "Break Timing",
             "1h 00m Total",
-            Icons.coffee_rounded,
             AppColors.goldDark,
           ),
         ),
@@ -204,9 +202,9 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     );
   }
 
-  Widget _timingCard(String title, String value, IconData icon, Color color) {
+  Widget _timingCard(String title, String value, Color accent) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(16),
@@ -219,39 +217,31 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: accent,
             ),
-            child: Icon(icon, color: color, size: 24),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.grey400,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.navy,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
             ),
           ),
         ],
@@ -296,33 +286,54 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _buildDatePicker(),
-              _buildDropdown(
-                _selectedMonth,
-                _months,
-                (v) {
-                  setState(() => _selectedMonth = v!);
-                  _fetchLogs();
-                },
-              ),
-              _buildDropdown(
-                _selectedYear,
-                _years,
-                (v) {
-                  setState(() => _selectedYear = v!);
-                  _fetchLogs();
-                },
-              ),
-              _buildDropdown(
-                _selectedStatus,
-                _statuses,
-                (v) => setState(() => _selectedStatus = v!),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double itemWidth = (constraints.maxWidth - 12) / 2;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: itemWidth,
+                    height: 48,
+                    child: _buildDatePicker(),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    height: 48,
+                    child: _buildDropdown(
+                      _selectedMonth,
+                      _months,
+                      (v) {
+                        setState(() => _selectedMonth = v!);
+                        _fetchLogs();
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    height: 48,
+                    child: _buildDropdown(
+                      _selectedYear,
+                      _years,
+                      (v) {
+                        setState(() => _selectedYear = v!);
+                        _fetchLogs();
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    height: 48,
+                    child: _buildDropdown(
+                      _selectedStatus,
+                      _statuses,
+                      (v) => setState(() => _selectedStatus = v!),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           Row(
@@ -346,19 +357,6 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
                 ),
                 child: const Text("Reset"),
               ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: () => _fetchLogs(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.navy,
-                  foregroundColor: AppColors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                icon: const Icon(Icons.search_rounded, size: 18),
-                label: const Text("Apply Filters"),
-              ),
             ],
           ),
         ],
@@ -372,7 +370,8 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
     ValueChanged<String?> onChanged,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         color: AppColors.offWhite,
         borderRadius: BorderRadius.circular(12),
@@ -381,9 +380,12 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
+          isExpanded: true,
+          isDense: true,
           icon: const Icon(
             Icons.keyboard_arrow_down_rounded,
             color: AppColors.grey600,
+            size: 20,
           ),
           style: GoogleFonts.inter(
             fontSize: 13,
@@ -391,7 +393,10 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
             color: AppColors.navy,
           ),
           items: items.map((String item) {
-            return DropdownMenuItem<String>(value: item, child: Text(item));
+            return DropdownMenuItem<String>(
+              value: item,
+              child: Text(item, overflow: TextOverflow.ellipsis),
+            );
           }).toList(),
           onChanged: onChanged,
         ),
@@ -412,14 +417,14 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
       },
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: AppColors.offWhite,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.grey200),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
               Icons.calendar_month_rounded,
@@ -427,14 +432,17 @@ class _ManagerAttendanceScreenState extends State<ManagerAttendanceScreen> {
               color: AppColors.navy,
             ),
             const SizedBox(width: 8),
-            Text(
-              _selectedDate == null
-                  ? "Select Date"
-                  : DateFormat('MMM dd, yyyy').format(_selectedDate!),
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.navy,
+            Expanded(
+              child: Text(
+                _selectedDate == null
+                    ? "Select Date"
+                    : DateFormat('MMM dd, yyyy').format(_selectedDate!),
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.navy,
+                ),
               ),
             ),
           ],

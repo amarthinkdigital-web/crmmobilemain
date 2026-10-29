@@ -277,31 +277,27 @@ class _TaskTrackingScreenState extends State<TaskTrackingScreen> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Task Management",
-              style: GoogleFonts.inter(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: AppColors.navy,
-                letterSpacing: -0.5,
-              ),
-            ),
-            Text(
-              "Manage and monitor all team performance and assignments",
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: AppColors.grey400,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+        Text(
+          "Task Management",
+          style: GoogleFonts.inter(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: AppColors.navy,
+            letterSpacing: -0.5,
+          ),
         ),
+        Text(
+          "Manage and monitor all team performance and assignments",
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: AppColors.grey400,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 16),
         ElevatedButton.icon(
           onPressed: () => _showAddTaskDialog(),
           icon: const Icon(Icons.add_rounded, size: 20),

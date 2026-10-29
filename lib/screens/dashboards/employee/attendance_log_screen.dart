@@ -163,62 +163,71 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
   }
 
   Widget _buildShiftInfoCard() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      decoration: BoxDecoration(
-        color: AppColors.navy.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.navy.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildTimingItem(
-            Icons.access_time_rounded,
+    return Row(
+      children: [
+        Expanded(
+          child: _buildTimingItem(
             "Shift Timing",
             "9:00 AM - 6:00 PM",
             AppColors.navy,
           ),
-          Container(height: 40, width: 1, color: AppColors.grey200),
-          _buildTimingItem(
-            Icons.coffee_rounded,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildTimingItem(
             "Break Timing",
             "60 Min Max",
-            AppColors.gold,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimingItem(IconData icon, String title, String value, Color iconColor) {
-    return Column(
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: iconColor),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.grey600,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: AppColors.navy,
+            AppColors.goldDark,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTimingItem(String title, String value, Color accent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.grey200),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.navy.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

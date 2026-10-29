@@ -18,33 +18,60 @@ class _TeamPendingApprovalsScreenState
   bool _isLoading = true;
   String? _errorMessage;
 
-  final TextEditingController _searchController = TextEditingController();
+  // Backend employees dropdown state
+  List<Map<String, dynamic>> _employees = [];
+  bool _isEmployeesLoading = false;
+  String? _selectedEmployeeId;   // user_id from backend
+  String? _selectedEmployeeName; // for API name filter
+
   DateTime? _selectedDate;
 
   @override
   void initState() {
     super.initState();
+    _fetchEmployees();
     _fetchPendingWorksheets();
+  }
+
+  Future<void> _fetchEmployees() async {
+    setState(() => _isEmployeesLoading = true);
+    try {
+      final res = await ApiService.getEmployeeProfiles();
+      if (mounted && res['error'] == false) {
+        final List empData = res['data'] ?? [];
+        final List<Map<String, dynamic>> fetched = [];
+        for (var emp in empData) {
+          final fname = emp['first_name']?.toString() ?? '';
+          final lname = emp['last_name']?.toString() ?? '';
+          final fullName = '$fname $lname'.trim();
+          final id = emp['user_id']?.toString() ?? emp['id']?.toString() ?? '';
+          if (fullName.isNotEmpty && id.isNotEmpty) {
+            fetched.add({'id': id, 'name': fullName});
+          }
+        }
+        fetched.sort((a, b) => a['name']!.compareTo(b['name']!));
+        setState(() {
+          _employees = fetched;
+          _isEmployeesLoading = false;
+        });
+      } else {
+        setState(() => _isEmployeesLoading = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isEmployeesLoading = false);
+    }
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchPendingWorksheets() async {
     setState(() => _isLoading = true);
-    final params = <String, String>{};
-    if (_searchController.text.isNotEmpty) {
-      params['name'] = _searchController.text;
-    }
-    if (_selectedDate != null) {
-      params['work_date'] = DateFormat('yyyy-MM-dd').format(_selectedDate!);
-    }
     final res = await ApiService.getTeamPendingWorksheets(
-      name: params['name'],
-      workDate: params['work_date'],
+      name: _selectedEmployeeName,
+      workDate: _selectedDate != null ? DateFormat('yyyy-MM-dd').format(_selectedDate!) : null,
     );
     if (mounted) {
       setState(() {
@@ -61,11 +88,7 @@ class _TeamPendingApprovalsScreenState
 
   List<Map<String, dynamic>> get _filteredWorksheets {
     return _worksheets.where((ws) {
-      if (_searchController.text.isNotEmpty) {
-        final name =
-            (ws['user']?['name'] ?? ws['user_name'] ?? '').toString().toLowerCase();
-        if (!name.contains(_searchController.text.toLowerCase())) return false;
-      }
+      // Local date filter (API already filters by name)
       if (_selectedDate != null) {
         final wd = ws['work_date']?.toString().substring(0, 10) ?? '';
         if (wd != DateFormat('yyyy-MM-dd').format(_selectedDate!)) return false;
@@ -153,43 +176,135 @@ class _TeamPendingApprovalsScreenState
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              flex: 3,
-              child: TextField(
-                controller: _searchController,
-                onChanged: (v) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: "Search employee name...",
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  filled: true,
-                  fillColor: AppColors.offWhite,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+            // --- Backend Employee Dropdown ---
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.offWhite,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.grey100),
+              ),
+              child: _isEmployeesLoading
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 10),
+                          Text("Loading employees..."),
+                        ],
+                      ),
+                    )
+                  : DropdownButtonHideUnderline(
+                      child: DropdownButton<String?>(
+                        value: _selectedEmployeeId,
+                        isExpanded: true,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.navy),
+                        hint: Text(
+                          "Select Employee",
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: AppColors.grey400,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: AppColors.navy,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        items: [
+                          DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text(
+                              "All Employees",
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: AppColors.grey400,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          ..._employees.map(
+                            (emp) => DropdownMenuItem<String?>(
+                              value: emp['id'],
+                              child: Text(
+                                emp['name'],
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  color: AppColors.navy,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          final emp = val != null
+                              ? _employees.firstWhere(
+                                  (e) => e['id'] == val,
+                                  orElse: () => {},
+                                )
+                              : null;
+                          setState(() {
+                            _selectedEmployeeId = val;
+                            _selectedEmployeeName = emp?['name'];
+                          });
+                          _fetchPendingWorksheets();
+                        },
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 12),
+            // --- Date + Filter Button Row ---
+            Row(
+              children: [
+                _buildDatePicker(),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _fetchPendingWorksheets,
+                  icon: const Icon(Icons.filter_list_rounded, size: 18),
+                  label: const Text("Filter"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    foregroundColor: AppColors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            _buildDatePicker(),
-            const SizedBox(width: 12),
-            ElevatedButton.icon(
-              onPressed: _fetchPendingWorksheets,
-              icon: const Icon(Icons.search_rounded, size: 18),
-              label: const Text("Search"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.navy,
-                foregroundColor: AppColors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
+                const SizedBox(width: 8),
+                // Clear button
+                if (_selectedEmployeeId != null || _selectedDate != null)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _selectedEmployeeId = null;
+                        _selectedEmployeeName = null;
+                        _selectedDate = null;
+                      });
+                      _fetchPendingWorksheets();
+                    },
+                    icon: const Icon(Icons.clear_rounded, size: 16),
+                    label: const Text("Clear"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.grey600,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      side: BorderSide(color: AppColors.grey200),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),

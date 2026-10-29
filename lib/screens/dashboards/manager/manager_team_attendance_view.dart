@@ -546,20 +546,31 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
 
   Widget _buildDropdown(String? label, String value,
       List<DropdownMenuItem<String>> items, void Function(String?) onChanged) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-          color: AppColors.offWhite,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.grey100)),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isDense: true,
-          style: GoogleFonts.inter(
-              color: AppColors.navy, fontSize: 13, fontWeight: FontWeight.w600),
-          items: items,
-          onChanged: onChanged,
+    return SizedBox(
+      width: 150,
+      height: 44,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+            color: AppColors.offWhite,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.grey100)),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: value,
+            isExpanded: true,
+            isDense: true,
+            icon: const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: AppColors.grey600,
+              size: 20,
+            ),
+            style: GoogleFonts.inter(
+                color: AppColors.navy, fontSize: 13, fontWeight: FontWeight.w600),
+            items: items,
+            onChanged: onChanged,
+          ),
         ),
       ),
     );
@@ -572,13 +583,22 @@ class _TeamAttendanceViewScreenState extends State<TeamAttendanceViewScreen> {
         if (d != null) setState(() => selectedDate = d);
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        width: 150,
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.centerLeft,
         decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.grey100)),
         child: Row(
           children: [
             const Icon(Icons.calendar_month_rounded, size: 14, color: AppColors.navy),
             const SizedBox(width: 6),
-            Text(selectedDate == null ? "Date" : DateFormat('dd/MM').format(selectedDate!), style: GoogleFonts.inter(color: AppColors.navy, fontSize: 13, fontWeight: FontWeight.w600)),
+            Expanded(
+              child: Text(
+                selectedDate == null ? "Date" : DateFormat('dd/MM').format(selectedDate!),
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(color: AppColors.navy, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
           ],
         ),
       ),

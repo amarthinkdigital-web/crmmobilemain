@@ -3488,6 +3488,31 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getManagerSalaryDetails(int id) async {
+    try {
+      final headers = await _headers();
+      final response = await http
+          .get(Uri.parse('$baseUrl/manager/salaries/$id'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'error': false, 'data': data['data'] ?? data};
+      } else if (response.statusCode == 404) {
+        return {
+          'error': true,
+          'message': 'Manager salary record ID does not exist (404).',
+        };
+      }
+      return {
+        'error': true,
+        'message': data['message'] ?? 'Failed to load manager salary details (${response.statusCode})',
+      };
+    } catch (e) {
+      return {'error': true, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
   // ─── Domain & Hosting Endpoints ───────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getAdminDomains() async {
